@@ -47,6 +47,26 @@
   nav.tabs button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;
     gap:2px;padding:7px 0;color:var(--muted);font-size:11px;font-weight:500;border-radius:10px}
   nav.tabs button .ic{font-size:19px;line-height:1}
+  nav.tabs button{position:relative}
+  nav.tabs .bdg{position:absolute;top:2px;left:calc(50% + 8px);background:var(--red);color:#fff;font-size:10px;font-weight:600;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+  body.gating #app{display:none}
+  #gate{display:none}
+  body.gating #gate{display:flex;min-height:100vh;min-height:100dvh;background:#000;color:#fff;align-items:center;justify-content:center;padding:28px 22px;text-align:center}
+  .ginner{width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center}
+  .ginner img{width:120px;height:120px}
+  .ginner img.gsm{width:64px;height:64px;margin-bottom:10px}
+  .gname{font-family:var(--display);font-weight:500;letter-spacing:8px;font-size:34px;margin:22px 0 34px;padding-left:8px}
+  .gtitle{font-family:var(--display);font-weight:500;letter-spacing:2px;font-size:22px;margin-bottom:14px;text-transform:uppercase}
+  #gate .btn.gbtn{background:#fff;color:#000}
+  .gbtn{min-width:200px;margin-top:10px;font-size:17px;padding:14px 28px}
+  .gnames{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:6px}
+  .gname-b{background:#fff;color:#000;border:none;border-radius:22px;padding:11px 16px;font-size:15px;font-weight:600}
+  .gname-b span{color:#1B8A3E}
+  .gnote{color:#bbb;font-size:13px;margin:14px 0 6px;line-height:1.4}
+  .glinks{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+  #gate .linkbtn{color:#fff;opacity:.8}
+  .gin{width:100%;max-width:240px;text-align:center;letter-spacing:10px;font-size:24px;padding:12px;margin:8px 0;border-radius:12px;border:1.5px solid #444;background:#111;color:#fff}
+  #gate .err{color:#ff7a7a;min-height:20px}
   nav.tabs button.active{color:var(--red)}
 
   h2{font-family:var(--display);font-size:15px;text-transform:uppercase;letter-spacing:.4px;margin:0}
@@ -280,7 +300,7 @@
   <div id="banner"></div>
 
   <main>
-    <section class="view active" id="view-home"><div id="homeBody"></div></section>
+    <section class="view active" id="view-home"><div id="homeBody"></div><div id="homeFoot" style="text-align:center;margin:18px 0 6px"></div></section>
     <section class="view" id="view-teams"><div id="teamsBody"></div></section>
     <section class="view" id="view-scorers"><div id="scorersBody"></div></section>
     <section class="view" id="view-avail"><div id="availBody"></div></section>
@@ -301,6 +321,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="gate"></div>
 <div id="confirm"><div class="box"><p id="confirmMsg"></p>
   <div class="row"><button class="btn ghost" data-act="confirmNo">Cancel</button><button class="btn red" data-act="confirmYes">Confirm</button></div></div></div>
 
@@ -360,7 +381,7 @@ function hideBanner(){ $('#banner').style.display = 'none'; }
 
 /* ================= data ================= */
 function defaultFines(){ return { season:1, players:[], types:[], rewards:[], entries:[] }; }
-function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', seriesName:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]} }; }
+function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', seriesName:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]}, members:{} }; }
 function normalize(d){
   const o = Object.assign(defaultLeague(), d || {});
   o.players = o.players || []; o.matches = o.matches || [];
@@ -370,6 +391,7 @@ function normalize(d){
   o.fines = f;
   o.captains = Object.assign({ reds:'', whites:'' }, o.captains || {});
   o.seriesName = String(o.seriesName || '');
+  o.members = (o.members && typeof o.members === 'object') ? o.members : {};
   o.seriesMeta = o.seriesMeta || {}; o.weeks = o.weeks || {}; o.history = o.history || [];
   o.fee = (o.fee === undefined || o.fee === null || isNaN(Number(o.fee))) ? 5 : Number(o.fee);
   const fin = Object.assign({ opening:0, entries:[] }, o.finance || {});
@@ -379,8 +401,19 @@ function normalize(d){
 let league = null;          // null until the cloud (or cache) gives us something
 let loaded = false;
 let availBy = {}, unsubs = {}, availDate = '', calMonth = '';   // availability replies per Monday
-let user = null;            // set when the editor PIN has been entered on this device
-try{ if(localStorage.getItem(LS_EDITOR) === '1') user = { editor:true }; }catch(e){}
+let user = null;            // truthy only when the person on this device is an admin
+let organiser = false;      // organiser code entered on this device
+let guest = false, gateOpen = true, gateStep = 'splash', gatePid = '', lastAbort = false;
+const LS_SESS = 'bbtnfLeagueSession';
+try{ organiser = localStorage.getItem(LS_EDITOR) === '1'; }catch(e){}
+function getSess(){ try{ return JSON.parse(localStorage.getItem(LS_SESS) || 'null'); }catch(e){ return null; } }
+function meId(){
+  const s = getSess(); if(!s || !league || !league.members) return '';
+  const m = league.members[s.pid];
+  return (m && m.pin && m.pin === s.pin && league.players.some(p => p.id === s.pid)) ? s.pid : '';
+}
+function isAdminNow(){ const me = meId(); return !!(organiser || (me && league.members[me].admin)); }
+function refreshUser(){ user = isAdminNow() ? { editor:true } : null; }
 let db = null;
 let scorerScope = 'series';
 let currentTab = 'home';
@@ -438,10 +471,11 @@ async function mutate(fn){
     await db.runTransaction(async t => {
       const s = await t.get(ref);
       const cur = s.exists ? normalize(s.data()) : defaultLeague();
-      fn(cur);
+      lastAbort = false;
+      if(fn(cur) === 'abort'){ lastAbort = true; return; }
       t.set(ref, cur);
     });
-    return true;
+    return !lastAbort;
   }catch(e){
     console.error(e);
     if(e && e.code === 'permission-denied') toast("Couldn't save — check the Firebase rules");
@@ -616,18 +650,19 @@ function renderAvail(){
   if(!league){ el.innerHTML = emptyLeague(); return; }
   if(!availDate){ availDate = nextDate(); calMonth = availDate.slice(0, 7); }
   const av = availBy[availDate] || {};
-  const me = (() => { try{ return localStorage.getItem(LS_ME) || ''; }catch(e){ return ''; } })();
+  const me = meId();
   const mePlayer = league.players.find(p => p.id === me);
   const c = availCounts(availDate);
   let h = calendarHtml();
   h += '<div class="card" style="text-align:center"><div class="muted small" style="font-weight:600;letter-spacing:.8px;text-transform:uppercase">' + (availDate === nextDate() ? 'Next match' : 'Match day') + '</div><div style="font-weight:600;font-size:19px;margin-top:3px">' + esc(fmtDate(availDate, true)) + '</div></div>';
   if(!league.players.length){ el.innerHTML = h + '<div class="card empty"><b>No players yet</b>Players will appear here once an admin adds them.</div>'; return; }
-  h += '<div class="me-box"><label for="meSelect">Who are you?</label><select id="meSelect"><option value="">Pick your name…</option>' +
-    league.players.slice().sort(byName).map(p => '<option value="' + esc(p.id) + '"' + (p.id === me ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>';
   if(mePlayer){
     const cur = av[mePlayer.id] ? av[mePlayer.id].s : '';
+    h += '<div class="me-box"><label>Playing as ' + esc(mePlayer.name) + '</label>';
     h += '<div class="ans">' + [['in','✅ I\'m in'],['maybe','🤔 Maybe'],['out','❌ Can\'t']].map(a =>
       '<button class="' + a[0] + (cur === a[0] ? ' sel' : '') + '" data-act="setme" data-s="' + a[0] + '">' + a[1] + '</button>').join('') + '</div>';
+  } else {
+    h += '<div class="me-box"><label>Are you playing?</label><div class="hint" style="margin-bottom:10px">Sign in with your name to say if you\'re in.</div><button class="btn red full" data-act="openGate">Sign in</button>';
   }
   h += '</div>';
   h += '<div class="sumrow"><div class="sum"><b>' + c.in + '</b><span>In</span></div><div class="sum"><b>' + c.maybe + '</b><span>Maybe</span></div><div class="sum"><b>' + c.out + '</b><span>Out</span></div><div class="sum"><b>' + c.none + '</b><span>No reply</span></div></div>';
@@ -700,7 +735,7 @@ function feesHtml(){
     const ks = keys.filter(k => wk[k].t === team).sort((a, b) => wk[a].n.localeCompare(wk[b].n));
     if(!ks.length) return '';
     return '<div class="section-title" style="margin:14px 2px 4px">' + title + '</div>' + ks.map(k => { const r = wk[k];
-      return '<div class="adminrow"><span class="pname">' + esc(r.n) + '</span><button class="paidbtn' + (r.paid ? ' on' : '') + '" data-act="wkpay" data-pid="' + esc(k) + '">' + (r.paid ? money(r.amt) + ' paid ✓' : 'Paid ' + money(r.amt) + '?') + '</button></div>'; }).join('');
+      return '<div class="adminrow"><span class="pname">' + esc(r.n) + '</span><button class="paidbtn' + (r.paid ? ' on' : '') + '" data-act="wkpay" data-pid="' + esc(k) + '">' + (r.paid ? 'Paid ✓' : 'Paid') + '</button></div>'; }).join('');
   };
   return h + group('Reds', 'reds') + group('Whites', 'whites');
 }
@@ -768,14 +803,9 @@ function renderAdmin(force){
   pendingAdminRender = false;
   adminSecs = {};
 
-  if(!user){
-    el.innerHTML = '<div class="card"><h2>Editor PIN</h2><p class="muted small" style="margin:8px 0 14px">Everyone can view the league. Enter the editor PIN to add results, fines and change teams.</p>' +
-      '<div class="field"><label for="loginPin">PIN</label><input type="password" id="loginPin" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="Enter PIN" style="letter-spacing:4px;font-size:20px;text-align:center"></div>' +
-      '<button class="btn red full" data-act="login">Sign in</button><div class="err" id="loginErr"></div></div>';
-    return;
-  }
+  if(!user){ el.innerHTML = ''; return; }
 
-  let h = '<div class="card row" style="justify-content:space-between"><div><div class="muted small">Editor mode</div><div style="font-weight:600">PIN accepted ✓</div></div><button class="btn ghost sm" data-act="logout">Sign out</button></div>';
+  let h = '<div class="card row" style="justify-content:space-between"><div><div class="muted small">Signed in as</div><div style="font-weight:600">' + esc(meId() ? (league.players.find(p => p.id === meId()) || {name:'Admin'}).name + ' · admin' : 'Organiser') + '</div></div><button class="btn ghost sm" data-act="logout">Sign out</button></div>';
 
   if(!league){
     h += '<div class="card"><h2>Start the league</h2><p class="muted small" style="margin:8px 0 14px">Creates an empty league. You then add the players yourself and pick the teams.</p>' +
@@ -831,6 +861,7 @@ function renderAdmin(force){
     '<button class="btn ghost full" data-act="newSeries">Start a new series</button>' +
     '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>' + histAdminHtml());
 
+  h += fold('people', 'People & access', peopleHtml());
   const head = h;
   const labels = {
     add:['➕', 'Add result', st.complete ? 'Series finished' : seriesLabel(league.seriesNo) + ': ' + st.r + '–' + st.w],
@@ -840,11 +871,12 @@ function renderAdmin(force){
     fees:['💷', 'Match fees', Object.keys(weekRows(feeDate)).length + ' playing · ' + fmtDate(feeDate)],
     fin:['🏦', 'Finances', 'Bank: ' + money(finStats().balance)],
     next:['📅', 'Next match', fmtDate(nextDate())],
+    people:['📲', 'People & access', peopleStats().joined + ' of ' + league.players.length + ' joined'],
     series:['🏁', 'Series & past scores', seriesLabel(league.seriesNo) + ' · first to ' + league.target]
   };
   if(!adminSection || !adminSecs[adminSection]){
     adminSection = '';
-    h = head + '<div class="hub">' + Object.keys(labels).map(k => '<button class="hubbtn" data-act="adminGo" data-sec="' + k + '"><span class="hi">' + labels[k][0] + '</span><b>' + labels[k][1] + '</b><span class="hs">' + esc(labels[k][2]) + '</span></button>').join('') + '</div>';
+    h = head + notJoinedHtml() + '<div class="hub">' + Object.keys(labels).map(k => '<button class="hubbtn" data-act="adminGo" data-sec="' + k + '"><span class="hi">' + labels[k][0] + '</span><b>' + labels[k][1] + '</b><span class="hs">' + esc(labels[k][2]) + '</span></button>').join('') + '</div>';
     el.innerHTML = h;
     return;
   }
@@ -932,9 +964,6 @@ function renderFines(force){
     if(f.rewards.length) h += '<div class="section-title" style="margin:16px 2px 8px">Rewards (take money off)</div><div class="fgrid">' + f.rewards.map(t => '<button class="fchip rw" data-act="addFine" data-kind="reward" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b class="neg">−' + money(t.amount) + '</b></button>').join('') + '</div>';
     h += '<div class="section-title" style="margin:16px 2px 8px">Something else</div><div class="row"><input type="text" id="fCustName" class="grow" placeholder="What for?" maxlength="40"><input type="number" id="fCustAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:90px"></div>' +
       '<div class="row" style="margin-top:8px"><button class="btn sm grow" data-act="addCustom" data-kind="fine">Add fine</button><button class="btn ghost sm grow" data-act="addCustom" data-kind="reward">Add reward</button></div></div>';
-  } else {
-    h += '<div class="card"><h2>Editors</h2><p class="muted small" style="margin:8px 0 12px">Everyone can view the fines. Enter the editor PIN to add or change them.</p>' +
-      '<div class="row"><input type="password" id="finePin" class="grow" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="PIN" style="text-align:center;letter-spacing:4px"><button class="btn sm" data-act="finelogin">Unlock</button></div><div class="err" id="finePinErr"></div></div>';
   }
 
   h += '<div class="section-title">Players · % of pot</div><div class="card" style="padding:4px 16px">';
@@ -979,7 +1008,15 @@ function renderFines(force){
 }
 
 function renderAll(){
-  renderHome(); renderTeams(); renderScorers(); renderVoting(); renderAvail(); renderFines(); renderAdmin();
+  refreshUser();
+  renderHome(); renderTeams(); renderScorers(); renderVoting(); renderAvail(); renderFines(); renderAdmin(); renderGate(); applyChrome();
+}
+function applyChrome(){
+  const tab = document.querySelector('nav.tabs button[data-tab="admin"]');
+  if(tab){ tab.style.display = user ? '' : 'none'; const n = (user && league) ? peopleStats().missing.length : 0; let bd = tab.querySelector('.bdg'); if(n){ if(!bd){ bd = document.createElement('span'); bd.className = 'bdg'; tab.appendChild(bd); } bd.textContent = n; } else if(bd) bd.remove(); }
+  if(!user && currentTab === 'admin') showTab('home');
+  const me = meId(), mp = me && league ? league.players.find(p => p.id === me) : null, ft = $('#homeFoot');
+  if(ft) ft.innerHTML = (mp || organiser) ? '<span class="muted small">Signed in as ' + esc(mp ? mp.name : 'Organiser') + '</span> <button class="linkbtn" data-act="logout">Sign out</button>' : '<button class="linkbtn" data-act="openGate">Sign in with your name</button>';
 }
 
 /* ================= actions ================= */
@@ -1012,13 +1049,32 @@ document.addEventListener('click', async e => {
     case 'confirmNo': $('#confirm').classList.remove('open'); confirmCb = null; break;
     case 'confirmYes': { $('#confirm').classList.remove('open'); const cb = confirmCb; confirmCb = null; if(cb) cb(); break; }
     case 'scope': scorerScope = b.dataset.v; renderScorers(); break;
-    case 'setme': { const me = localStorage.getItem(LS_ME); if(me) setAvailability(me, b.dataset.s); break; }
+    case 'setme': { const me = meId(); if(me) setAvailability(me, b.dataset.s); break; }
     case 'pickdate': availDate = b.dataset.d; calMonth = availDate.slice(0, 7); watchAvailability(); renderAvail(); break;
     case 'calprev': case 'calnext': { const pr = calMonth.split('-').map(Number); const d = new Date(pr[0], pr[1] - 1 + (a === 'calnext' ? 1 : -1), 1); calMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); renderAvail(); break; }
     case 'setpid': setAvailability(b.dataset.pid, b.dataset.s); break;
-    case 'login': doLogin('loginPin', 'loginErr'); break;
-    case 'finelogin': doLogin('finePin', 'finePinErr'); break;
-    case 'logout': user = null; try{ localStorage.removeItem(LS_EDITOR); }catch(e){} renderAvail(); renderFines(true); renderAdmin(true); break;
+    case 'logout': signOut(); break;
+    case 'openGate': gateOpen = true; gateStep = 'names'; applyAuthUI(); break;
+    case 'gateEnter': if(meId() || organiser){ gateOpen = false; applyAuthUI(); } else { gateStep = 'names'; renderGate(true); } break;
+    case 'gateBack': gateStep = 'names'; renderGate(true); break;
+    case 'gateGuest': guest = true; gateOpen = false; applyAuthUI(); break;
+    case 'gateOrg': gateStep = 'organiser'; renderGate(true); { const i = $('#gateCode'); if(i) i.focus(); } break;
+    case 'gateName': {
+      gatePid = b.dataset.pid; const m = league && league.members[gatePid];
+      gateStep = (m && m.pin) ? 'enterpin' : 'setpin'; renderGate(true);
+      { const i = $('#gatePin'); if(i) i.focus(); } break;
+    }
+    case 'gateSet': await gateSetPin(); break;
+    case 'gateGo': gateCheckPin(); break;
+    case 'gateOrgGo': await gateOrganiser(); break;
+    case 'mkadmin': {
+      const pid = b.dataset.pid, on = b.dataset.on === '1';
+      if(await mutate(cur => { const m = cur.members[pid] || (cur.members[pid] = { pin:'', admin:false }); m.admin = on; })) toast(on ? 'Made admin' : 'Admin removed');
+      break;
+    }
+    case 'resetpin': askConfirm('Reset this PIN? They will choose a new one next time they sign in.', async () => {
+      if(await mutate(cur => { if(cur.members[b.dataset.pid]) cur.members[b.dataset.pid].pin = ''; })) toast('PIN reset');
+    }); break;
     case 'rename': renamePid = b.dataset.pid; renderAdmin(true); { const i = $('#renameIn'); if(i){ i.focus(); i.select(); } } break;
     case 'renameCancel': renamePid = ''; renderAdmin(true); break;
     case 'renameSave': {
@@ -1110,7 +1166,7 @@ document.addEventListener('click', async e => {
     case 'setFee': { const n = parseFloat($('#feeIn').value); if(!(n >= 0)){ toast('Enter the fee'); break; } if(await mutate(cur => { cur.fee = r2(n); })) toast('Fee saved'); break; }
     case 'setOpen': { const n = parseFloat($('#openIn').value); if(isNaN(n)){ toast('Enter an amount'); break; } if(await mutate(cur => { cur.finance.opening = r2(n); })) toast('Saved'); break; }
     case 'delPlayer': askConfirm('Remove this player? Their past goals stay in the results.', async () => {
-      if(await mutate(cur => { cur.players = cur.players.filter(p => p.id !== b.dataset.pid); ['reds','whites'].forEach(t => { if(cur.captains[t] === b.dataset.pid) cur.captains[t] = ''; }); })) toast('Player removed');
+      if(await mutate(cur => { cur.players = cur.players.filter(p => p.id !== b.dataset.pid); delete cur.members[b.dataset.pid]; ['reds','whites'].forEach(t => { if(cur.captains[t] === b.dataset.pid) cur.captains[t] = ''; }); })) toast('Player removed');
     }); break;
     case 'addPlayer': {
       const name = ($('#newName').value || '').trim(); if(!name){ toast('Enter a name'); break; }
@@ -1159,7 +1215,6 @@ document.addEventListener('click', async e => {
   }
 });
 document.addEventListener('change', e => {
-  if(e.target.id === 'meSelect'){ try{ localStorage.setItem(LS_ME, e.target.value); }catch(err){} renderAvail(); }
   if(e.target.id === 'fDate'){ form.date = e.target.value; }
   if(e.target.id === 'fPlayer'){ finePid = e.target.value; }
   if(e.target.id === 'feeDate'){ feeDate = e.target.value || defaultWeekDate(); watchAvailability(); renderAdmin(true); }
@@ -1170,8 +1225,8 @@ document.addEventListener('toggle', e => {
   const d = e.target; if(d.tagName === 'DETAILS' && d.dataset.key) adminOpen[d.dataset.key] = d.open;
   if(d.tagName === 'DETAILS' && d.dataset.fkey) fineOpen[d.dataset.fkey] = d.open;
 }, true);
-document.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.id === 'loginPin') doLogin('loginPin', 'loginErr');
-  if(e.key === 'Enter' && e.target.id === 'finePin') doLogin('finePin', 'finePinErr');
+document.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && (e.target.id === 'gatePin' || e.target.id === 'gatePin2' || e.target.id === 'gateCode')){ const bt = document.querySelector('#gate [data-go]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); }
@@ -1194,18 +1249,129 @@ function showTab(t){
   window.scrollTo(0, 0);
 }
 
-async function doLogin(inputId, errId){
-  const pin = ($('#' + inputId).value || '').trim();
-  const err = $('#' + errId);
-  if(!pin){ err.textContent = 'Enter the PIN'; return; }
+async function sha(pin){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('bbtnf:' + pin));
+  return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function gateErr(msg){ const e = $('#gateErr'); if(e) e.textContent = msg; }
+function saveSess(pid, pin){ try{ localStorage.setItem(LS_SESS, JSON.stringify({ pid:pid, pin:pin })); }catch(e){} }
+function finishSignIn(){ gateOpen = false; gateStep = 'splash'; applyAuthUI(); }
+async function gateSetPin(){
+  const a = ($('#gatePin').value || '').trim(), c = ($('#gatePin2').value || '').trim();
+  if(!/^\d{4}$/.test(a)){ gateErr('Your PIN must be 4 numbers'); return; }
+  if(a !== c){ gateErr("The two PINs don't match"); return; }
+  const pid = gatePid;
+  const ok = await mutate(cur => {
+    if(cur.members[pid] && cur.members[pid].pin) return 'abort';
+    const m = cur.members[pid] || (cur.members[pid] = { admin:false });
+    m.pin = a; m.t = Date.now();
+  });
+  if(!ok){
+    if(lastAbort){ gateErr('Someone has already signed up as this name'); gateStep = 'names'; setTimeout(() => renderGate(true), 1200); }
+    return;
+  }
+  saveSess(pid, a); finishSignIn();
+}
+function gateCheckPin(){
+  const a = ($('#gatePin').value || '').trim();
+  const m = league && league.members[gatePid];
+  if(!m || !m.pin){ gateStep = 'setpin'; renderGate(true); return; }
+  if(a !== m.pin){ gateErr('Wrong PIN'); return; }
+  saveSess(gatePid, a); finishSignIn();
+}
+async function gateOrganiser(){
+  const code = ($('#gateCode').value || '').trim();
+  if(!code){ gateErr('Enter the code'); return; }
   let hex = '';
-  try{
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('bbtnf:' + pin));
-    hex = Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
-  }catch(e){ err.textContent = 'Could not check the PIN here'; return; }
-  if(hex !== EDITOR_PIN_HASH){ err.textContent = 'Wrong PIN'; return; }
-  user = { editor:true };
-  try{ localStorage.setItem(LS_EDITOR, '1'); }catch(e){}
+  try{ hex = await sha(code); }catch(e){ gateErr('Could not check the code here'); return; }
+  if(hex !== EDITOR_PIN_HASH){ gateErr('Wrong code'); return; }
+  organiser = true; try{ localStorage.setItem(LS_EDITOR, '1'); }catch(e){}
+  finishSignIn();
+}
+function signOut(){
+  organiser = false; guest = false;
+  try{ localStorage.removeItem(LS_EDITOR); localStorage.removeItem(LS_SESS); }catch(e){}
+  gateOpen = true; gateStep = 'splash'; applyAuthUI();
+}
+function peopleStats(){
+  const mem = league ? league.members : {};
+  const ps = league ? league.players : [];
+  const joined = ps.filter(p => mem[p.id] && mem[p.id].pin).length;
+  return { joined:joined, total:ps.length, missing:ps.filter(p => !(mem[p.id] && mem[p.id].pin)) };
+}
+function notJoinedHtml(){
+  const st = peopleStats();
+  if(!st.total) return '';
+  if(!st.missing.length) return '<div class="warn" style="background:#E7F5EC">✅ Everyone has joined the app.</div>';
+  return '<div class="warn">📲 <b>' + st.missing.length + ' of ' + st.total + ' haven\'t got the app yet:</b> ' + st.missing.slice().sort(byName).map(p => esc(p.name)).join(', ') + '</div>';
+}
+function peopleHtml(){
+  const mem = league.members, ps = league.players.slice().sort(byName);
+  if(!ps.length) return '<div class="muted small">Add players first, then they can sign up with their name.</div>';
+  let h = notJoinedHtml() + '<div class="hint" style="margin-bottom:8px">Each person taps their own name and chooses a 4-digit PIN. You can see every PIN here. Admins can see the Admin section and edit Pub Fines.</div>';
+  h += ps.map(p => {
+    const m = mem[p.id] || {}, joined = !!m.pin;
+    return '<div class="adminrow"><div><div style="font-weight:600">' + esc(p.name) + (m.admin ? ' <span class="chip whites">Admin</span>' : '') + '</div>' +
+      '<div class="muted small">' + (joined ? 'PIN <b style="letter-spacing:2px;color:var(--ink)">' + esc(m.pin) + '</b>' : 'Not joined yet') + '</div></div>' +
+      '<div class="row"><button class="btn ghost sm" data-act="mkadmin" data-pid="' + esc(p.id) + '" data-on="' + (m.admin ? '0' : '1') + '">' + (m.admin ? 'Remove admin' : 'Make admin') + '</button>' +
+      (joined ? '<button class="btn ghost sm" data-act="resetpin" data-pid="' + esc(p.id) + '">Reset PIN</button>' : '') + '</div></div>';
+  }).join('');
+  return h;
+}
+function renderGate(force){
+  const g = $('#gate'); if(!g) return;
+  document.body.classList.toggle('gating', gateOpen);
+  if(!gateOpen) return;
+  if(!force && (gateStep === 'setpin' || gateStep === 'enterpin' || gateStep === 'organiser')) return;
+  const logo = (document.querySelector('header.top img') || {}).src || '';
+  const mark = '<img src="' + logo + '" alt=""><div class="gname">BBTNF</div>';
+  let h = '';
+  if(gateStep === 'splash'){
+    h = mark + '<button class="btn red gbtn" data-act="gateEnter">Enter</button>';
+  } else if(gateStep === 'names'){
+    const ps = league ? league.players.slice().sort(byName) : [];
+    h = '<img class="gsm" src="' + logo + '" alt=""><div class="gtitle">Tap your name</div>';
+    if(!league && !loaded) h += '<div class="gnote">Loading…</div>';
+    else if(!ps.length) h += '<div class="gnote">No players have been added yet.</div>';
+    else h += '<div class="gnames">' + ps.map(p => '<button class="gname-b" data-act="gateName" data-pid="' + esc(p.id) + '">' + esc(p.name) + ((league.members[p.id] && league.members[p.id].pin) ? ' <span>✓</span>' : '') + '</button>').join('') + '</div>';
+    h += '<div class="gnote">New here? Tap your own name to sign up. ✓ means already signed up.</div>' +
+      '<div class="glinks"><button class="linkbtn" data-act="gateGuest">Just looking</button><button class="linkbtn" data-act="gateOrg">Organiser code</button></div>';
+  } else if(gateStep === 'setpin' || gateStep === 'enterpin'){
+    const p = league && league.players.find(x => x.id === gatePid);
+    const set = gateStep === 'setpin';
+    h = '<img class="gsm" src="' + logo + '" alt=""><div class="gtitle">' + esc(p ? p.name : '') + '</div>' +
+      '<div class="gnote" style="margin-top:0">' + (set ? 'Choose a 4-digit PIN. Only you will use it to sign in. Don\'t use a bank PIN.' : 'Enter your PIN') + '</div>' +
+      '<input type="password" id="gatePin" class="gin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="····">' +
+      (set ? '<input type="password" id="gatePin2" class="gin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="Again">' : '') +
+      '<button class="btn red gbtn" data-go="1" data-act="' + (set ? 'gateSet' : 'gateGo') + '">' + (set ? 'Sign up' : 'Sign in') + '</button>' +
+      '<div class="err" id="gateErr"></div>' +
+      (set ? '' : '<div class="gnote">Forgotten it? Ask an admin to reset your PIN.</div>') +
+      '<div class="glinks"><button class="linkbtn" data-act="gateBack">‹ Back to names</button></div>';
+  } else {
+    h = '<img class="gsm" src="' + logo + '" alt=""><div class="gtitle">Organiser code</div>' +
+      '<input type="password" id="gateCode" class="gin" inputmode="numeric" autocomplete="off" placeholder="Code">' +
+      '<button class="btn red gbtn" data-go="1" data-act="gateOrgGo">Sign in</button><div class="err" id="gateErr"></div>' +
+      '<div class="glinks"><button class="linkbtn" data-act="gateBack">‹ Back to names</button></div>';
+  }
+  g.innerHTML = '<div class="ginner">' + h + '</div>';
+}
+function applyAuthUI(){
+  refreshUser();
+  const tab = document.querySelector('nav.tabs button[data-tab="admin"]');
+  if(tab){
+    tab.style.display = user ? '' : 'none';
+    const n = (user && league) ? peopleStats().missing.length : 0;
+    let bd = tab.querySelector('.bdg');
+    if(n){ if(!bd){ bd = document.createElement('span'); bd.className = 'bdg'; tab.appendChild(bd); } bd.textContent = n; }
+    else if(bd) bd.remove();
+  }
+  if(!user && currentTab === 'admin') showTab('home');
+  const me = meId(), mp = me && league ? league.players.find(p => p.id === me) : null;
+  const ft = $('#homeFoot');
+  if(ft) ft.innerHTML = (mp || organiser)
+    ? '<span class="muted small">Signed in as ' + esc(mp ? mp.name : 'Organiser') + '</span> <button class="linkbtn" data-act="logout">Sign out</button>'
+    : '<button class="linkbtn" data-act="openGate">Sign in with your name</button>';
+  renderGate(true);
   renderAvail(); renderFines(true); renderAdmin(true);
 }
 

@@ -1193,9 +1193,21 @@ document.addEventListener('click', async e => {
         sentToast(await sendPush([{ pids:pids, title:'Are you playing? 📅', body:'Tap Availability and let us know for ' + fmtDate(date) + '.', tag:'avail' }]));
       }); break;
     }
+    case 'notifyPick': notifSel[b.dataset.pid] = !notifSel[b.dataset.pid]; { const i = $('#notifText'); if(i) notifDraft = i.value; } renderAdmin(true); break;
+    case 'notifySet': {
+      const v = b.dataset.v; notifSel = {};
+      league.players.forEach(p => { const has = !!((league.members[p.id] || {}).push || []).length; if(v === 'all' || (v === 'reds' && p.team === 'reds') || (v === 'whites' && p.team === 'whites') || (v === 'on' && has)) notifSel[p.id] = true; });
+      { const i = $('#notifText'); if(i) notifDraft = i.value; } renderAdmin(true); break;
+    }
+    case 'notifySel': {
+      const t = ($('#notifText').value || '').trim(), pids = Object.keys(notifSel).filter(k => notifSel[k]);
+      if(!pids.length){ toast('Tap the names you want to send to'); break; }
+      if(!t){ toast('Type a message'); break; }
+      askConfirm('Send this to ' + pids.length + (pids.length === 1 ? ' person?' : ' people?'), async () => { const j = await sendPush([{ pids:pids, title:'BBTNF', body:t }]); sentToast(j); if(j){ notifDraft = ''; renderAdmin(true); } }); break;
+    }
     case 'notifyCustom': {
       const t = ($('#notifText').value || '').trim(); if(!t){ toast('Type a message'); break; }
-      askConfirm('Send this to everyone?', async () => { const j = await sendPush([{ title:'BBTNF', body:t }]); sentToast(j); if(j){ const i = $('#notifText'); if(i) i.value = ''; } }); break;
+      askConfirm('Send this to everyone?', async () => { const j = await sendPush([{ title:'BBTNF', body:t }]); sentToast(j); if(j){ notifDraft = ''; renderAdmin(true); } }); break;
     }
     case 'statscope': statScope = b.dataset.v; renderAdmin(true); break;
     case 'toggleVote': { if(!organiser) break; const opening = !league.voting.open; if(await mutate(cur => { cur.voting.open = !cur.voting.open; })){ toast('Saved'); if(opening && league.autoNotify) sendPush([{ title:'🗳️ ' + voteYear() + ' BBTNF Awards voting is open', body:'Tap Voting and cast your vote. One vote each and it\'s secret.', tag:'vote' }]); } break; }
@@ -1367,6 +1379,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', e => {
   if(e.target.classList && e.target.classList.contains('vsel')){ ballot[e.target.dataset.cat] = e.target.value; }
   if(e.target.id === 'fDate'){ form.date = e.target.value; refreshForm(); }
+  if(e.target.id === 'notifText') notifDraft = e.target.value;
   if(e.target.id === 'fPlayer'){ finePid = e.target.value; }
   if(e.target.id === 'feeDate'){ feeDate = e.target.value || defaultWeekDate(); watchAvailability(); renderAdmin(true); }
   if(e.target.id === 'finDate'){ finDate = e.target.value || todayStr(); }
@@ -1381,7 +1394,7 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); }
-  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', serName:'setSerName', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', vcatName:'addVcat', notifText:'notifyCustom', openIn:'setOpen', targetIn:'setTarget' };
+  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', serName:'setSerName', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', vcatName:'addVcat', notifText:'notifySel', openIn:'setOpen', targetIn:'setTarget' };
   if(e.key === 'Enter' && ENTER_MAP[e.target.id]){
     const parts = ENTER_MAP[e.target.id].split(':');
     const bt = document.querySelector('[data-act="' + parts[0] + '"]' + (parts[1] ? '[data-kind="' + parts[1] + '"]' : ''));
@@ -1406,7 +1419,7 @@ async function sha(pin){
 }
 const VAPID_PUBLIC = 'BP9VZOAbmvpezMVOjhzEHf3wmWvweNxTetEASqhFSv5p51v6LFx0o1Uulqe4mqLlT9H7QCUw3Yw0NUyye4YeM6k';
 const LS_ORG = 'bbtnfLeagueOrgCode';
-let pushOn = false;
+let pushOn = false, notifSel = {}, notifDraft = '';
 function pushSupported(){ return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
 function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent || ''); }
 function isStandalone(){ try{ return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }catch(e){ return false; } }
@@ -1485,7 +1498,12 @@ function notifyHtml(){
     ' Each person turns them on by tapping "Turn on notifications" at the bottom of the Home tab (iPhone: add BBTNF to the Home Screen first).</div>' +
     '<div class="field"><label>Teams</label><button class="btn full" data-act="notifyTeams">Tell players their team for ' + esc(fmtDate(feeDate)) + '</button></div>' +
     '<div class="field"><label>Availability</label><button class="btn ghost full" data-act="notifyNudge">Nudge people who haven\'t replied for ' + esc(fmtDate(nextDate())) + '</button></div>' +
-    '<div class="field"><label for="notifText">Your own message to everyone</label><div class="row"><input type="text" id="notifText" class="grow" placeholder="e.g. Pitch changed to pitch 3" maxlength="120"><button class="btn sm" data-act="notifyCustom">Send</button></div></div>' +
+    '<div class="field"><label for="notifText">Your own message</label><input type="text" id="notifText" placeholder="e.g. Pitch changed to pitch 3" maxlength="120" value="' + esc(notifDraft) + '">' +
+    '<div class="muted small" style="margin:12px 0 6px;font-weight:600">CHOOSE WHO GETS IT (🔔 = has notifications on)</div>' +
+    '<div class="row" style="margin-bottom:8px"><button class="btn ghost sm" data-act="notifySet" data-v="all">All</button><button class="btn ghost sm" data-act="notifySet" data-v="none">None</button><button class="btn ghost sm" data-act="notifySet" data-v="reds">Reds</button><button class="btn ghost sm" data-act="notifySet" data-v="whites">Whites</button><button class="btn ghost sm" data-act="notifySet" data-v="on">Only 🔔</button></div>' +
+    '<div class="row" style="margin-bottom:12px">' + ps.map(p => { const has = !!(mem[p.id] && (mem[p.id].push || []).length); return '<button class="btn sm' + (notifSel[p.id] ? '' : ' ghost') + '" data-act="notifyPick" data-pid="' + esc(p.id) + '"' + (has ? '' : ' style="opacity:.55"') + '>' + esc(p.name) + (has ? ' 🔔' : '') + '</button>'; }).join('') + '</div>' +
+    '<button class="btn full" data-act="notifySel">Send to ' + Object.keys(notifSel).filter(k => notifSel[k]).length + ' selected</button>' +
+    '<button class="btn ghost full" style="margin-top:8px" data-act="notifyCustom">Send to everyone</button></div>' +
     '<div class="field"><label>Automatic notifications</label><button class="btn ' + (league.autoNotify ? 'ghost' : 'red') + ' full" data-act="toggleAuto">' + (league.autoNotify ? 'On: results and voting are sent automatically (tap to turn off)' : 'Off (tap to turn on)') + '</button></div>';
   return h;
 }

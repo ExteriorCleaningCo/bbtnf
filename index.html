@@ -621,10 +621,10 @@ function renderScorers(){
 
 function availCounts(date){
   const av = availBy[date] || {};
-  const c = { in:0, maybe:0, out:0, none:0, redsIn:0, whitesIn:0 };
+  const c = { in:0, maybe:0, out:0, none:0, redsIn:0, whitesIn:0, floatIn:0 };
   (league ? league.players : []).forEach(p => {
     const r = av[p.id];
-    if(r && c[r.s] != null){ c[r.s]++; if(r.s === 'in'){ if(p.team === 'reds') c.redsIn++; else if(p.team === 'whites') c.whitesIn++; } }
+    if(r && c[r.s] != null){ c[r.s]++; if(r.s === 'in'){ if(p.team === 'reds') c.redsIn++; else if(p.team === 'whites') c.whitesIn++; else c.floatIn++; } }
     else c.none++;
   });
   return c;
@@ -666,7 +666,7 @@ function renderAvail(){
   }
   h += '</div>';
   h += '<div class="sumrow"><div class="sum"><b>' + c.in + '</b><span>In</span></div><div class="sum"><b>' + c.maybe + '</b><span>Maybe</span></div><div class="sum"><b>' + c.out + '</b><span>Out</span></div><div class="sum"><b>' + c.none + '</b><span>No reply</span></div></div>';
-  h += '<div class="card" style="padding:12px 16px"><div class="row" style="justify-content:space-around"><span><span class="chip reds">Reds</span> <b>' + c.redsIn + '</b> in</span><span><span class="chip whites">Whites</span> <b>' + c.whitesIn + '</b> in</span></div></div>';
+  h += '<div class="card" style="padding:12px 16px"><div class="row" style="justify-content:space-around"><span><span class="chip reds">Reds</span> <b>' + c.redsIn + '</b> in</span><span><span class="chip whites">Whites</span> <b>' + c.whitesIn + '</b> in</span><span><span class="chip" style="background:#E6E6E6;color:#111">Floaters</span> <b>' + c.floatIn + '</b> in</span></div></div>';
   const group = (title, ps) => {
     if(!ps.length) return '';
     return '<div class="section-title">' + title + '</div><div class="card">' + ps.sort(byName).map(p => {

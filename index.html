@@ -381,7 +381,7 @@ function hideBanner(){ $('#banner').style.display = 'none'; }
 
 /* ================= data ================= */
 function defaultFines(){ return { season:1, players:[], types:[], rewards:[], entries:[] }; }
-function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', seriesName:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]}, members:{} }; }
+function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', seriesName:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]}, members:{}, voting:{open:false,cats:[],voted:{},ballots:[]} }; }
 function normalize(d){
   const o = Object.assign(defaultLeague(), d || {});
   o.players = o.players || []; o.matches = o.matches || [];
@@ -392,6 +392,8 @@ function normalize(d){
   o.captains = Object.assign({ reds:'', whites:'' }, o.captains || {});
   o.seriesName = String(o.seriesName || '');
   o.members = (o.members && typeof o.members === 'object') ? o.members : {};
+  const vt = Object.assign({ open:false, cats:[], voted:{}, ballots:[] }, o.voting || {});
+  vt.cats = vt.cats || []; vt.voted = vt.voted || {}; vt.ballots = vt.ballots || []; o.voting = vt;
   o.seriesMeta = o.seriesMeta || {}; o.weeks = o.weeks || {}; o.history = o.history || [];
   o.fee = (o.fee === undefined || o.fee === null || isNaN(Number(o.fee))) ? 5 : Number(o.fee);
   const fin = Object.assign({ opening:0, entries:[] }, o.finance || {});
@@ -422,7 +424,7 @@ let adminSection = '', adminSecs = {};
 let form = newForm();
 let feeDate = defaultWeekDate(), finDate = '', renamePid = '', renameFp = '';
 let pendingAdminRender = false, pendingFinesRender = false;
-let finePid = '', fineDate = todayStr(), fineOpen = {};
+let finePid = '', fineDate = todayStr(), fineOpen = { fplayers:true, mgr:true };
 const STD_FINES = [['Bad Shot',1],['Bad Passing',1],['Bad Tackle',1],['Megs',1],['Stupid False Calling',1],['Goalkeeper Howler',1],['Temper Tantrum',1],['No Pub',1],['Clearing Small Fence',1],['Losing Head',2],['Clearing Nantwich Town Fence',2.5],['GK Conceding 3+ Goals',2.5],['Giving Away a Penalty',2.5],['Missing Penalty',5]];
 const STD_REWARDS = [['GK Clean Sheet',2],['Hattrick',2]];
 
@@ -446,10 +448,11 @@ function seriesState(n){
   const winner = complete ? (r > w ? 'reds' : (w > r ? 'whites' : null)) : null;
   return { r, w, complete, winner };
 }
-function goalsMap(seriesNo){
+function goalsMap(seriesNo, year){
   const map = {};
   (league ? league.matches : []).forEach(m => {
     if(seriesNo != null && (m.seriesNo || 1) !== seriesNo) return;
+    if(year && (m.date || '').slice(0, 4) !== String(year)) return;
     (m.scorers || []).forEach(s => {
       const k = s.playerId;
       if(!map[k]) map[k] = { playerId:k, name:s.name, team:s.team, goals:0 };
@@ -594,18 +597,77 @@ function renderTeams(){
   h += '<div class="muted small" style="text-align:center">⚽ = goals this series</div>';
   el.innerHTML = h;
 }
+let statScope = 'year';
+function statsHtml(){
+  const yr = voteYear(), sn = league.seriesNo;
+  const ms = league.matches.filter(m => statScope === 'series' ? (m.seriesNo || 1) === sn : (m.date || '').slice(0, 4) === String(yr));
+  const st = {};
+  const get = pid => st[pid] || (st[pid] = { p:0, w:0, d:0, l:0, g:0 });
+  ms.forEach(m => {
+    const rows = ((league.weeks[m.date] || {}).rows) || {};
+    const win = m.reds > m.whites ? 'reds' : m.whites > m.reds ? 'whites' : 'draw';
+    Object.keys(rows).forEach(pid => {
+      const t = rows[pid].t; if(t !== 'reds' && t !== 'whites') return;
+      const x = get(pid); x.p++;
+      if(win === 'draw') x.d++; else if(win === t) x.w++; else x.l++;
+    });
+    (m.scorers || []).forEach(sc => { get(sc.playerId).g += Number(sc.goals) || 0; });
+  });
+  const list = Object.keys(st).map(pid => { const pl = league.players.find(p => p.id === pid); const x = st[pid]; return Object.assign({ name: pl ? pl.name : '(removed)', pct: x.p ? Math.round(x.w / x.p * 100) : 0 }, x); })
+    .sort((a,b) => b.pct - a.pct || b.p - a.p || b.g - a.g || a.name.localeCompare(b.name));
+  let h = '<div class="seg" style="margin-bottom:12px"><button data-act="statscope" data-v="year" class="' + (statScope === 'year' ? 'active' : '') + '">' + yr + ' season</button><button data-act="statscope" data-v="series" class="' + (statScope === 'series' ? 'active' : '') + '">This series</button></div>';
+  if(!list.length) return h + '<div class="muted small">No stats yet. They build up from the teams you pick each week (Pick teams) and the results you add.</div>';
+  const cols = 'display:grid;grid-template-columns:minmax(0,1fr) 26px 26px 26px 26px 42px 30px;gap:4px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;text-align:center';
+  h += '<div style="' + cols + ';font-size:11px;font-weight:600;color:var(--muted)"><span style="text-align:left">Player</span><span>P</span><span>W</span><span>D</span><span>L</span><span>Win%</span><span>⚽</span></div>';
+  h += list.map(x => '<div style="' + cols + '"><span style="text-align:left;font-weight:600;overflow-wrap:anywhere">' + esc(x.name) + '</span><span>' + x.p + '</span><span>' + x.w + '</span><span>' + x.d + '</span><span>' + x.l + '</span><b>' + x.pct + '%</b><span>' + x.g + '</span></div>').join('');
+  h += '<div class="hint" style="margin-top:10px">P played · W won · D drawn · L lost · Win% of games played · ⚽ goals. Games come from the teams picked each week in Pick teams.</div>';
+  return h;
+}
+let ballot = {};
+function voteYear(){ return new Date().getFullYear(); }
 function renderVoting(){
-  const el = $('#votingBody');
-  if(el) el.innerHTML = '<div class="card empty"><b>Voting</b>Coming soon.</div>';
+  const el = $('#votingBody'); if(!el) return;
+  const title = voteYear() + ' BBTNF Awards Voting';
+  if(!league){ el.innerHTML = loaded ? emptyLeague() : '<div class="empty">Loading…</div>'; return; }
+  const vt = league.voting;
+  if(!vt.open){ el.innerHTML = '<div class="card empty" style="padding:48px 16px"><b>' + title + '</b>Coming soon</div>'; return; }
+  const me = meId();
+  if(!me){ el.innerHTML = '<div class="card empty"><b>' + title + '</b>Sign in with your name to vote.<div style="margin-top:14px"><button class="btn red" data-act="openGate">Sign in</button></div></div>'; return; }
+  if(vt.voted[me]){ el.innerHTML = '<div class="card empty" style="padding:40px 16px"><b>' + title + '</b>✅ Thanks, your vote is in. Votes are secret.</div>'; return; }
+  if(!vt.cats.length){ el.innerHTML = '<div class="card empty"><b>' + title + '</b>Voting is open but no awards have been set up yet.</div>'; return; }
+  const noms = league.players.filter(p => p.id !== me).sort(byName);
+  let h = '<div class="card"><h2>' + title + '</h2><p class="muted small" style="margin:8px 0 0">One vote per person and it is secret. You can\'t vote for yourself and you can\'t change it once sent.</p></div>';
+  h += vt.cats.map(c => '<div class="card"><div style="font-weight:600;margin-bottom:8px">' + esc(c.name) + '</div><select class="f vsel" data-cat="' + esc(c.id) + '"><option value="">No vote</option>' +
+    noms.map(p => '<option value="' + esc(p.id) + '"' + (ballot[c.id] === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></div>').join('');
+  h += '<button class="btn red full" data-act="castVote">Submit my vote</button>';
+  el.innerHTML = h;
+}
+function votingAdminHtml(){
+  const vt = league.voting, total = league.players.length, done = league.players.filter(p => vt.voted[p.id]);
+  let h = '<div class="hint" style="margin-bottom:10px">Only the organiser can see this. While voting is closed the Voting tab says "Coming soon".</div>' +
+    '<button class="btn ' + (vt.open ? 'ghost' : 'red') + ' full" data-act="toggleVote">' + (vt.open ? 'Close voting' : 'Open voting') + '</button>' +
+    '<div class="muted small" style="margin:14px 0 6px;font-weight:600">AWARDS</div><div id="vcRows">' + vt.cats.map(c => '<div class="adminrow"><span>' + esc(c.name) + '</span><button class="linkbtn" data-act="delVcat" data-id="' + esc(c.id) + '">✕</button></div>').join('') + '</div>' +
+    '<div class="row" style="margin:10px 0 16px"><input type="text" id="vcatName" class="grow" placeholder="New award e.g. Player of the Year" maxlength="40"><button class="btn sm" data-act="addVcat">Add</button></div>';
+  h += '<div class="muted small" style="margin:6px 0;font-weight:600">TURNOUT: ' + done.length + ' of ' + total + ' voted</div>';
+  const not = league.players.filter(p => !vt.voted[p.id]).sort(byName);
+  if(not.length && done.length) h += '<div class="hint" style="margin-bottom:10px">Not voted yet: ' + not.map(p => esc(p.name)).join(', ') + '</div>';
+  h += '<div class="muted small" style="margin:10px 0 6px;font-weight:600">RESULTS (who got votes)</div>';
+  h += vt.cats.map(c => {
+    const cnt = {}; vt.ballots.forEach(b => { if(b[c.id]) cnt[b[c.id]] = (cnt[b[c.id]] || 0) + 1; });
+    const list = Object.keys(cnt).map(pid => ({ n:(league.players.find(p => p.id === pid) || { name:'(removed)' }).name, v:cnt[pid] })).sort((a,b) => b.v - a.v || a.n.localeCompare(b.n));
+    return '<div style="margin-bottom:12px"><div style="font-weight:600">' + esc(c.name) + '</div>' + (list.length ? list.map(x => '<div class="adminrow" style="padding:6px 0"><span>' + esc(x.n) + '</span><b>' + x.v + '</b></div>').join('') : '<div class="muted small">No votes yet.</div>') + '</div>';
+  }).join('') || '<div class="muted small">Add some awards first.</div>';
+  h += '<button class="btn ghost sm full" data-act="resetVotes" style="margin-top:8px">Clear all votes</button>';
+  return h;
 }
 
 function renderScorers(){
   const el = $('#scorersBody');
   if(!league){ el.innerHTML = emptyLeague(); return; }
-  const map = goalsMap(scorerScope === 'series' ? league.seriesNo : null);
+  const yr = new Date().getFullYear(), map = scorerScope === 'series' ? goalsMap(league.seriesNo) : goalsMap(null, yr);
   const list = Object.values(map).filter(x => x.goals > 0).sort((a,b) => b.goals - a.goals || a.name.localeCompare(b.name));
   let h = '<div class="seg"><button data-act="scope" data-v="series" class="' + (scorerScope === 'series' ? 'active' : '') + '">This series</button>' +
-    '<button data-act="scope" data-v="all" class="' + (scorerScope === 'all' ? 'active' : '') + '">All time</button></div>';
+    '<button data-act="scope" data-v="year" class="' + (scorerScope === 'year' ? 'active' : '') + '">' + yr + ' season</button></div>';
   if(!list.length){ h += '<div class="card empty"><b>No goals yet</b>Top scorers will show up once results are in.</div>'; }
   else {
     const max = list[0].goals; let rank = 0, prev = null;
@@ -798,6 +860,8 @@ function renderAdmin(force){
     // keep the lists fresh without touching the box being typed in
     const pr = $('#plRows');
     if(league && pr && !pr.contains(ae)){ pr.innerHTML = playerRowsHtml(); const c = $('#plCount'); if(c) c.textContent = league.players.length; }
+    const vr = $('#vcRows');
+    if(league && vr && !vr.contains(ae)) vr.innerHTML = league.voting.cats.map(c => '<div class="adminrow"><span>' + esc(c.name) + '</span><button class="linkbtn" data-act="delVcat" data-id="' + esc(c.id) + '">✕</button></div>').join('');
     return;
   }
   pendingAdminRender = false;
@@ -861,7 +925,8 @@ function renderAdmin(force){
     '<button class="btn ghost full" data-act="newSeries">Start a new series</button>' +
     '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>' + histAdminHtml());
 
-  h += fold('people', 'People & access', peopleHtml());
+  h += fold('stats', 'Stats', statsHtml());
+  if(organiser){ h += fold('people', 'People & access', peopleHtml()); h += fold('voting', 'Voting', votingAdminHtml()); }
   h += fold('pubfines', 'Pub fines', '<div id="adminFines"></div>');
   const head = h;
   const labels = {
@@ -873,12 +938,15 @@ function renderAdmin(force){
     fin:['🏦', 'Finances', 'Bank: ' + money(finStats().balance)],
     next:['📅', 'Next match', fmtDate(nextDate())],
     pubfines:['🍺', 'Pub fines', 'Season ' + league.fines.season],
+    stats:['📊', 'Stats', 'Games, wins & goals'],
     people:['📲', 'People & access', peopleStats().joined + ' of ' + league.players.length + ' joined'],
+    voting:['🗳️', 'Voting', league.voting.open ? 'Open · ' + Object.keys(league.voting.voted).length + ' voted' : 'Closed'],
     series:['🏁', 'Series & past scores', seriesLabel(league.seriesNo) + ' · first to ' + league.target]
   };
+  Object.keys(labels).forEach(k => { if(!adminSecs[k]) delete labels[k]; });
   if(!adminSection || !adminSecs[adminSection]){
     adminSection = '';
-    h = head + notJoinedHtml() + '<div class="hub">' + Object.keys(labels).map(k => '<button class="hubbtn" data-act="adminGo" data-sec="' + k + '"><span class="hi">' + labels[k][0] + '</span><b>' + labels[k][1] + '</b><span class="hs">' + esc(labels[k][2]) + '</span></button>').join('') + '</div>';
+    h = head + (organiser ? notJoinedHtml() : '') + '<div class="hub">' + Object.keys(labels).map(k => '<button class="hubbtn" data-act="adminGo" data-sec="' + k + '"><span class="hi">' + labels[k][0] + '</span><b>' + labels[k][1] + '</b><span class="hs">' + esc(labels[k][2]) + '</span></button>').join('') + '</div>';
     el.innerHTML = h;
     return;
   }
@@ -963,12 +1031,22 @@ function renderFines(force){
       '<div class="field" style="margin-top:12px"><label for="fineDate">Date</label><input type="date" id="fineDate" value="' + esc(fineDate) + '"></div>' +
       '<div class="field"><label for="fPlayer">Player</label><select class="f" id="fPlayer">' + opts + '</select></div>' + (f.players.length ? '' : '<div class="hint" style="margin:-6px 0 12px">No players yet. Add them in Editor tools below (Pub Fines players).</div>');
     if(f.types.length) h += '<div class="fgrid">' + f.types.map(t => '<button class="fchip" data-act="addFine" data-kind="fine" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b class="pos">' + money(t.amount) + '</b></button>').join('') + '</div>';
-    else h += '<div class="hint">No fine types yet. Open "Fine and reward types" at the bottom to add the standard list.</div>';
+    else h += '<div class="hint">No fine types yet. Use "Fine and reward types" just below to add the standard list.</div>';
     if(f.rewards.length) h += '<div class="section-title" style="margin:16px 2px 8px">Rewards (take money off)</div><div class="fgrid">' + f.rewards.map(t => '<button class="fchip rw" data-act="addFine" data-kind="reward" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b class="neg">−' + money(t.amount) + '</b></button>').join('') + '</div>';
     h += '<div class="section-title" style="margin:16px 2px 8px">Something else</div><div class="row"><input type="text" id="fCustName" class="grow" placeholder="What for?" maxlength="40"><input type="number" id="fCustAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:90px"></div>' +
       '<div class="row" style="margin-top:8px"><button class="btn sm grow" data-act="addCustom" data-kind="fine">Add fine</button><button class="btn ghost sm grow" data-act="addCustom" data-kind="reward">Add reward</button></div></div>';
   }
 
+  if(edit){
+    h += '<div class="section-title">Set up players and fine types</div>' +
+      fpFold(f) + '<details class="fold" data-fkey="mgr"' + (fineOpen.mgr ? ' open' : '') + '><summary>Fine and reward types</summary><div class="fold-body">' +
+      (!f.types.length && !f.rewards.length ? '<button class="btn red full" data-act="seedFines" style="margin-bottom:12px">Add the standard BBTNF fines and rewards</button>' : '') +
+      '<div class="muted small" style="font-weight:600;margin-bottom:4px">FINES</div>' + '<div id="tRows">' + typeRowsHtml(f.types, 'fine') + '</div>' +
+      '<div class="row" style="margin:10px 0 18px"><input type="text" id="tName" class="grow" placeholder="New fine" maxlength="40"><input type="number" id="tAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="fine">Add</button></div>' +
+      '<div class="muted small" style="font-weight:600;margin-bottom:4px">REWARDS</div>' + '<div id="rRows">' + typeRowsHtml(f.rewards, 'reward') + '</div>' +
+      '<div class="row" style="margin-top:10px"><input type="text" id="rName" class="grow" placeholder="New reward" maxlength="40"><input type="number" id="rAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="reward">Add</button></div></div></details>' +
+      '<details class="fold" data-fkey="season"' + (fineOpen.season ? ' open' : '') + '><summary>New fines season</summary><div class="fold-body"><p class="muted small" style="margin:0 0 12px">Starts the fines list again from £0. The old season is kept safely in the database but is no longer shown.</p><button class="btn ghost full" data-act="newSeason">Start season ' + (f.season + 1) + '</button></div></details>';
+  }
   h += '<div class="section-title">Players · % of pot</div><div class="card" style="padding:4px 16px">';
   h += rows.map(m => {
     const pct = tColl > 0 ? Math.round(m.coll / tColl * 100) : 0;
@@ -997,16 +1075,6 @@ function renderFines(force){
       es.slice().sort((a,b) => a.name.localeCompare(b.name)).map(e => '<div class="erow"><div class="el"><b>' + esc(e.name) + '</b> · ' + esc(e.label) + '</div><span class="ea ' + (e.amount < 0 ? 'neg' : 'pos') + '">' + (e.amount < 0 ? '−' : '') + money(Math.abs(e.amount)) + '</span>' + (e.amount > 0 ? '<span class="pill' + (e.paid ? ' in' : '') + '">' + (e.paid ? 'Paid' : 'Owing') + '</span>' : '') + '</div>').join('') + '</div></details>';
   }).join('') : '<div class="card empty"><b>No fines yet</b>Fines added by the editors will show here week by week.</div>';
 
-  if(edit){
-    h += '<div class="section-title">Editor tools</div>' +
-      fpFold(f) + '<details class="fold" data-fkey="mgr"' + (fineOpen.mgr ? ' open' : '') + '><summary>Fine and reward types</summary><div class="fold-body">' +
-      (!f.types.length && !f.rewards.length ? '<button class="btn red full" data-act="seedFines" style="margin-bottom:12px">Add the standard BBTNF fines and rewards</button>' : '') +
-      '<div class="muted small" style="font-weight:600;margin-bottom:4px">FINES</div>' + '<div id="tRows">' + typeRowsHtml(f.types, 'fine') + '</div>' +
-      '<div class="row" style="margin:10px 0 18px"><input type="text" id="tName" class="grow" placeholder="New fine" maxlength="40"><input type="number" id="tAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="fine">Add</button></div>' +
-      '<div class="muted small" style="font-weight:600;margin-bottom:4px">REWARDS</div>' + '<div id="rRows">' + typeRowsHtml(f.rewards, 'reward') + '</div>' +
-      '<div class="row" style="margin-top:10px"><input type="text" id="rName" class="grow" placeholder="New reward" maxlength="40"><input type="number" id="rAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="reward">Add</button></div></div></details>' +
-      '<details class="fold" data-fkey="season"' + (fineOpen.season ? ' open' : '') + '><summary>New fines season</summary><div class="fold-body"><p class="muted small" style="margin:0 0 12px">Starts the fines list again from £0. The old season is kept safely in the database but is no longer shown.</p><button class="btn ghost full" data-act="newSeason">Start season ' + (f.season + 1) + '</button></div></details>';
-  }
   el.innerHTML = h;
 }
 
@@ -1070,12 +1138,32 @@ document.addEventListener('click', async e => {
     case 'gateSet': await gateSetPin(); break;
     case 'gateGo': gateCheckPin(); break;
     case 'gateOrgGo': await gateOrganiser(); break;
+    case 'statscope': statScope = b.dataset.v; renderAdmin(true); break;
+    case 'toggleVote': if(!organiser) break; if(await mutate(cur => { cur.voting.open = !cur.voting.open; })) toast('Saved'); break;
+    case 'addVcat': { if(!organiser) break; const nm = ($('#vcatName').value || '').trim(); if(!nm){ toast('Enter an award name'); break; } if(await mutate(cur => { cur.voting.cats.push({ id:uid(), name:nm }); })){ const i = $('#vcatName'); if(i){ i.value = ''; i.focus(); } } break; }
+    case 'delVcat': if(!organiser) break; await mutate(cur => { cur.voting.cats = cur.voting.cats.filter(c => c.id !== b.dataset.id); }); break;
+    case 'resetVotes': if(!organiser) break; askConfirm('Clear ALL votes? Everyone can vote again.', async () => { if(await mutate(cur => { cur.voting.ballots = []; cur.voting.voted = {}; })){ ballot = {}; toast('Votes cleared'); } }); break;
+    case 'castVote': {
+      const me = meId(); if(!me) break;
+      if(!Object.values(ballot).some(v => v)){ toast('Pick at least one person'); break; }
+      askConfirm('Send your vote? You can\'t change it afterwards.', async () => {
+        const mine = Object.assign({}, ballot);
+        const ok = await mutate(cur => {
+          if(!cur.voting.open || cur.voting.voted[me]) return 'abort';
+          const b2 = {}; cur.voting.cats.forEach(c => { if(mine[c.id] && mine[c.id] !== me) b2[c.id] = mine[c.id]; });
+          cur.voting.ballots.push(b2); cur.voting.voted[me] = true;
+        });
+        if(ok){ ballot = {}; toast('Vote sent'); } else if(lastAbort) toast('Voting is closed or you have already voted');
+      });
+      break;
+    }
     case 'mkadmin': {
+      if(!organiser) break;
       const pid = b.dataset.pid, on = b.dataset.on === '1';
       if(await mutate(cur => { const m = cur.members[pid] || (cur.members[pid] = { pin:'', admin:false }); m.admin = on; })) toast(on ? 'Made admin' : 'Admin removed');
       break;
     }
-    case 'resetpin': askConfirm('Reset this PIN? They will choose a new one next time they sign in.', async () => {
+    case 'resetpin': if(!organiser) break; askConfirm('Reset this PIN? They will choose a new one next time they sign in.', async () => {
       if(await mutate(cur => { if(cur.members[b.dataset.pid]) cur.members[b.dataset.pid].pin = ''; })) toast('PIN reset');
     }); break;
     case 'rename': renamePid = b.dataset.pid; renderAdmin(true); { const i = $('#renameIn'); if(i){ i.focus(); i.select(); } } break;
@@ -1218,6 +1306,7 @@ document.addEventListener('click', async e => {
   }
 });
 document.addEventListener('change', e => {
+  if(e.target.classList && e.target.classList.contains('vsel')){ ballot[e.target.dataset.cat] = e.target.value; }
   if(e.target.id === 'fDate'){ form.date = e.target.value; }
   if(e.target.id === 'fPlayer'){ finePid = e.target.value; }
   if(e.target.id === 'feeDate'){ feeDate = e.target.value || defaultWeekDate(); watchAvailability(); renderAdmin(true); }
@@ -1233,7 +1322,7 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); }
-  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', serName:'setSerName', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', openIn:'setOpen', targetIn:'setTarget' };
+  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', serName:'setSerName', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', vcatName:'addVcat', openIn:'setOpen', targetIn:'setTarget' };
   if(e.key === 'Enter' && ENTER_MAP[e.target.id]){
     const parts = ENTER_MAP[e.target.id].split(':');
     const bt = document.querySelector('[data-act="' + parts[0] + '"]' + (parts[1] ? '[data-kind="' + parts[1] + '"]' : ''));
@@ -1372,7 +1461,7 @@ function applyAuthUI(){
     ? '<span class="muted small">Signed in as ' + esc(mp ? mp.name : 'Organiser') + '</span> <button class="linkbtn" data-act="logout">Sign out</button>'
     : '<button class="linkbtn" data-act="openGate">Sign in with your name</button>';
   renderGate(true);
-  renderAvail(); renderFines(true); renderAdmin(true);
+  renderAvail(); renderVoting(); renderFines(true); renderAdmin(true);
 }
 
 /* ================= Firebase wiring ================= */

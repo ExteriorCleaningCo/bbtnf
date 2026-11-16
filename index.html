@@ -348,7 +348,7 @@ function hideBanner(){ $('#banner').style.display = 'none'; }
 
 /* ================= data ================= */
 function defaultFines(){ return { season:1, players:[], types:[], rewards:[], entries:[] }; }
-function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, weeks:{}, fee:5, finance:{opening:0,entries:[]} }; }
+function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]} }; }
 function normalize(d){
   const o = Object.assign(defaultLeague(), d || {});
   o.players = o.players || []; o.matches = o.matches || [];
@@ -357,7 +357,7 @@ function normalize(d){
   f.players = f.players || []; f.types = f.types || []; f.rewards = f.rewards || []; f.entries = f.entries || []; f.season = Number(f.season) || 1;
   o.fines = f;
   o.captains = Object.assign({ reds:'', whites:'' }, o.captains || {});
-  o.seriesMeta = o.seriesMeta || {}; o.weeks = o.weeks || {};
+  o.seriesMeta = o.seriesMeta || {}; o.weeks = o.weeks || {}; o.history = o.history || [];
   o.fee = (o.fee === undefined || o.fee === null || isNaN(Number(o.fee))) ? 5 : Number(o.fee);
   const fin = Object.assign({ opening:0, entries:[] }, o.finance || {});
   fin.entries = fin.entries || []; fin.opening = Number(fin.opening) || 0; o.finance = fin;
@@ -508,7 +508,7 @@ function renderHome(){
 
   const past = [];
   for(let i = n - 1; i >= 1; i--) if(matchesOf(i).length) past.push(i);
-  if(past.length){
+  if(past.length || league.history.length){
     h += '<div class="section-title">Previous series</div>';
     past.forEach(i => {
       const s = seriesState(i);
@@ -516,6 +516,10 @@ function renderHome(){
       const meta = league.seriesMeta[i] || {};
       const capLine = (meta.reds || meta.whites) ? '<div class="muted small" style="margin-bottom:10px">Captains · Reds: ' + esc(meta.reds || '—') + ' · Whites: ' + esc(meta.whites || '—') + '</div>' : '';
       h += '<details class="fold"><summary>Series ' + i + ' · ' + esc(label) + '</summary><div class="fold-body">' + capLine + sortedMatches(i).map(matchCard).join('') + '</div></details>';
+    });
+    league.history.forEach(x => {
+      const badge = x.reds > x.whites ? '<span class="badge reds">Reds won</span>' : (x.whites > x.reds ? '<span class="badge whites">Whites won</span>' : '<span class="badge draw">Level</span>');
+      h += '<div class="match"><div class="m-top"><span>' + esc(x.label) + '</span>' + badge + '</div><div class="m-score"><span class="tn">REDS</span><span class="num">' + x.reds + '</span><span class="dash">–</span><span class="num">' + x.whites + '</span><span class="tn">WHITES</span></div></div>';
     });
   }
   el.innerHTML = h;
@@ -678,6 +682,17 @@ function playerRowsHtml(){
       '<button class="linkbtn" data-act="delPlayer" data-pid="' + esc(p.id) + '">Remove</button></div></div>';
   }).join('');
 }
+function histAdminHtml(){
+  let h = '<div class="section-title" style="margin:20px 2px 8px">Add a previous series score</div>' +
+    '<div class="field"><label for="hsName">Name</label><input type="text" id="hsName" placeholder="e.g. Series 1 (2025)" maxlength="40"></div>' +
+    '<div class="score-row"><div class="score-side reds"><div class="nm">REDS</div><input type="number" id="hsReds" inputmode="numeric" min="0" value="0" style="width:80px;text-align:center;margin-top:6px"></div>' +
+    '<div class="score-side whites"><div class="nm">WHITES</div><input type="number" id="hsWhites" inputmode="numeric" min="0" value="0" style="width:80px;text-align:center;margin-top:6px"></div></div>' +
+    '<button class="btn full" data-act="histAdd">Add previous series</button>' +
+    '<div class="hint">Final series score only. To add individual games from this series, use Add match result and pick the date.</div>';
+  if(league.history.length) h += '<div class="section-title" style="margin:18px 2px 4px">Added previous series</div>' + league.history.map(x =>
+    '<div class="adminrow"><div><div style="font-weight:600">' + esc(x.label) + '</div><div class="muted small">Reds ' + x.reds + ' – ' + x.whites + ' Whites</div></div><button class="linkbtn" data-act="histDel" data-id="' + esc(x.id) + '">Remove</button></div>').join('');
+  return h;
+}
 function fold(key, title, body){
   return '<details class="fold" data-key="' + key + '"' + (adminOpen[key] ? ' open' : '') + '><summary>' + title + '</summary><div class="fold-body">' + body + '</div></details>';
 }
@@ -748,11 +763,11 @@ function renderAdmin(force){
     '<div class="row"><button class="btn sm" data-act="setNext">Save date</button><button class="btn ghost sm" data-act="clearNext">Clear</button></div>' +
     '<div class="hint">Mondays only. If you leave this empty the app uses the next Monday automatically.</div>');
 
-  h += fold('series', 'Series settings',
+  h += fold('series', 'Series settings and previous scores',
     '<div class="field"><label for="targetIn">Wins needed to take the series</label><div class="row"><input type="number" id="targetIn" min="1" max="50" value="' + league.target + '" style="width:100px"><button class="btn sm" data-act="setTarget">Save</button></div></div>' +
     '<div class="hint" style="margin-bottom:12px">Currently series ' + league.seriesNo + ': Reds ' + st.r + ' – ' + st.w + ' Whites.</div>' +
     '<button class="btn ghost full" data-act="newSeries">Start a new series</button>' +
-    '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>');
+    '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>' + histAdminHtml());
 
   el.innerHTML = h;
   refreshForm();
@@ -954,6 +969,14 @@ document.addEventListener('click', async e => {
       await mutate(cur => { cur.fines.players = cur.fines.players.filter(x => x.id !== b.dataset.pid); cur.fines.entries = cur.fines.entries.filter(e => e.playerId !== b.dataset.pid); });
       if(finePid === b.dataset.pid) finePid = '';
     }); break;
+    case 'histAdd': {
+      const label = ($('#hsName').value || '').trim() || 'Previous series';
+      const r = parseInt($('#hsReds').value, 10), w = parseInt($('#hsWhites').value, 10);
+      if(!(r >= 0) || !(w >= 0)){ toast('Enter both scores'); break; }
+      if(await mutate(cur => { cur.history.push({ id:uid(), label, reds:r, whites:w }); })){ toast('Previous series added'); }
+      break;
+    }
+    case 'histDel': askConfirm('Remove this previous series score?', async () => { await mutate(cur => { cur.history = cur.history.filter(x => x.id !== b.dataset.id); }); }); break;
     case 'startLeague': if(await mutate(() => {})) toast('League started'); break;
     case 'rd+': form.reds++; refreshForm(); break;
     case 'rd-': form.reds = Math.max(0, form.reds - 1); refreshForm(); break;
@@ -1059,7 +1082,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.id 
   if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); }
-  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', openIn:'setOpen', targetIn:'setTarget' };
+  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', openIn:'setOpen', targetIn:'setTarget' };
   if(e.key === 'Enter' && ENTER_MAP[e.target.id]){
     const parts = ENTER_MAP[e.target.id].split(':');
     const bt = document.querySelector('[data-act="' + parts[0] + '"]' + (parts[1] ? '[data-kind="' + parts[1] + '"]' : ''));

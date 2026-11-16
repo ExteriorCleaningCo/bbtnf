@@ -304,7 +304,7 @@
     <section class="view" id="view-teams"><div id="teamsBody"></div></section>
     <section class="view" id="view-scorers"><div id="scorersBody"></div></section>
     <section class="view" id="view-avail"><div id="availBody"></div></section>
-    <section class="view" id="view-fines"><div id="finesBody"></div></section>
+    <section class="view" id="view-fines"><div id="finesBody"><div class="card empty" style="padding:48px 16px"><b>Coming soon</b>Pub Fines will be back here in January.</div></div></section>
     <section class="view" id="view-voting"><div id="votingBody"></div></section>
     <section class="view" id="view-admin"><div id="adminBody"></div></section>
   </main>
@@ -862,6 +862,7 @@ function renderAdmin(force){
     '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>' + histAdminHtml());
 
   h += fold('people', 'People & access', peopleHtml());
+  h += fold('pubfines', 'Pub fines', '<div id="adminFines"></div>');
   const head = h;
   const labels = {
     add:['➕', 'Add result', st.complete ? 'Series finished' : seriesLabel(league.seriesNo) + ': ' + st.r + '–' + st.w],
@@ -871,6 +872,7 @@ function renderAdmin(force){
     fees:['💷', 'Match fees', Object.keys(weekRows(feeDate)).length + ' playing · ' + fmtDate(feeDate)],
     fin:['🏦', 'Finances', 'Bank: ' + money(finStats().balance)],
     next:['📅', 'Next match', fmtDate(nextDate())],
+    pubfines:['🍺', 'Pub fines', 'Season ' + league.fines.season],
     people:['📲', 'People & access', peopleStats().joined + ' of ' + league.players.length + ' joined'],
     series:['🏁', 'Series & past scores', seriesLabel(league.seriesNo) + ' · first to ' + league.target]
   };
@@ -885,6 +887,7 @@ function renderAdmin(force){
     '<div class="card sec" data-key="' + adminSection + '"><h2 style="margin-bottom:14px">' + sec.title + '</h2>' + sec.body + '</div>';
   el.innerHTML = h;
   refreshForm();
+  if(adminSection === 'pubfines') renderFines(true);
   if(adminSection === 'pick') setTimeout(autoAssign, 0);
 }
 function refreshForm(){
@@ -921,7 +924,7 @@ function fpFold(f){
     '<div class="row" style="margin-top:12px"><input type="text" id="fpName" class="grow" placeholder="New player name" maxlength="30"><button class="btn sm" data-act="fpAdd">Add</button></div></div></details>';
 }
 function renderFines(force){
-  const el = $('#finesBody'); if(!el) return;
+  const el = $('#adminFines'); if(!el) return;
   const ae = document.activeElement;
   if(!force && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')){
     pendingFinesRender = true;
@@ -1239,7 +1242,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('focusout', () => { setTimeout(() => {
   const ae = document.activeElement;
   if(pendingAdminRender && !(ae && $('#adminBody').contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT'))) renderAdmin(true);
-  if(pendingFinesRender && !(ae && $('#finesBody').contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT'))) renderFines(true);
+  if(pendingFinesRender && !(ae && $('#adminBody').contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT'))) renderFines(true);
 }, 50); });
 
 function showTab(t){

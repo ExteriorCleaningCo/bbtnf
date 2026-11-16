@@ -327,6 +327,10 @@ const byName = (a,b) => a.name.localeCompare(b.name);
 function dayOf(s){ return new Date(s + 'T12:00:00'); }
 function ymd(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 function isMonday(s){ return !!s && dayOf(s).getDay() === 1; }
+function defaultWeekDate(){
+  const dow = new Date().getDay();            // Mon = tonight's game, Tue/Wed = last night's, otherwise the coming Monday
+  return (dow === 1 || dow === 2 || dow === 3) ? lastMonday() : upcomingMonday();
+}
 function upcomingMonday(){ const d = new Date(); d.setHours(12,0,0,0); while(d.getDay() !== 1) d.setDate(d.getDate() + 1); return ymd(d); }
 function lastMonday(){ const d = new Date(); d.setHours(12,0,0,0); while(d.getDay() !== 1) d.setDate(d.getDate() - 1); return ymd(d); }
 function todayStr(){
@@ -378,7 +382,7 @@ let currentTab = 'home';
 let adminOpen = { add:true };
 let adminSection = '', adminSecs = {};
 let form = newForm();
-let feeDate = '', finDate = '', renamePid = '', renameFp = '';
+let feeDate = defaultWeekDate(), finDate = '', renamePid = '', renameFp = '';
 let pendingAdminRender = false, pendingFinesRender = false;
 let finePid = '', fineDate = todayStr(), fineOpen = {};
 const STD_FINES = [['Bad Shot',1],['Bad Passing',1],['Bad Tackle',1],['Megs',1],['Stupid False Calling',1],['Goalkeeper Howler',1],['Temper Tantrum',1],['No Pub',1],['Clearing Small Fence',1],['Losing Head',2],['Clearing Nantwich Town Fence',2.5],['GK Conceding 3+ Goals',2.5],['Giving Away a Penalty',2.5],['Missing Penalty',5]];
@@ -508,6 +512,12 @@ function renderHome(){
       '<button class="btn red sm" data-tab="avail">Reply</button></div></div>';
   }
 
+  const tn = weekRows(nextDate()), tk = Object.keys(tn);
+  if(tk.length && !st.complete){
+    const tcol = team => '<div class="card tcol ' + team + '"><div class="tc-head">' + (team === 'reds' ? 'REDS' : 'WHITES') + '</div>' +
+      tk.filter(k => tn[k].t === team).sort((a, b) => tn[a].n.localeCompare(tn[b].n)).map(k => '<div class="tc-p"><span>' + esc(tn[k].n) + '</span></div>').join('') + '</div>';
+    h += '<div class="section-title">Teams for ' + esc(fmtDate(nextDate())) + '</div><div class="teamsrow">' + tcol('reds') + tcol('whites') + '</div>';
+  }
   const ms = sortedMatches(n);
   h += '<div class="section-title">Results this series</div>';
   h += ms.length ? ms.map(matchCard).join('') : '<div class="card empty"><b>No matches yet</b>Results will appear here after each game.</div>';
@@ -633,21 +643,41 @@ function renderAvail(){
 
 /* ---- match fees and finances ---- */
 function weekRows(date){ return ((league.weeks[date] || {}).rows) || {}; }
-function feesHtml(){
-  const wk = weekRows(feeDate), rows = Object.keys(wk).map(k => wk[k]);
-  const coll = rows.filter(r => r.paid).reduce((a, r) => a + r.amt, 0), owed = rows.filter(r => !r.paid).reduce((a, r) => a + r.amt, 0);
-  let h = '<div class="field"><label for="feeDate">Match day</label><input type="date" id="feeDate" value="' + esc(feeDate) + '"></div>' +
-    '<div class="sumrow"><div class="sum"><b>' + rows.length + '</b><span>Playing</span></div><div class="sum"><b>' + mh(coll) + '</b><span>Paid</span></div><div class="sum"><b>' + mh(owed) + '</b><span>Owed</span></div></div>' +
-    '<div class="hint" style="margin:0 0 10px">Match fee: ' + money(league.fee) + ' per player. Tap Playing for everyone who played, then tick who has paid.</div>' +
-    '<div class="row" style="margin-bottom:6px"><button class="btn ghost sm" data-act="wkall">Add everyone on a team</button><button class="btn ghost sm" data-act="wkpayall">Mark all paid</button></div>';
-  const group = (title, ps) => !ps.length ? '' : '<div class="section-title" style="margin:14px 2px 4px">' + title + '</div>' + ps.slice().sort(byName).map(p => {
-    const r = wk[p.id];
-    return '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><button class="paidbtn' + (r ? ' on' : '') + '" data-act="wkplay" data-pid="' + esc(p.id) + '">' + (r ? 'Playing ✓' : 'Playing?') + '</button>' +
-      (r ? '<button class="paidbtn' + (r.paid ? ' on' : '') + '" data-act="wkpay" data-pid="' + esc(p.id) + '">' + (r.paid ? money(r.amt) + ' paid ✓' : 'Paid ' + money(r.amt) + '?') + '</button>' : '') + '</div></div>';
-  }).join('');
-  h += group('Reds', league.players.filter(p => p.team === 'reds')) + group('Whites', league.players.filter(p => p.team === 'whites')) + group('No team', league.players.filter(p => p.team !== 'reds' && p.team !== 'whites'));
-  if(!league.players.length) h += '<div class="muted small">Add players first.</div>';
+function pickHtml(){
+  const wk = weekRows(feeDate), av = availBy[feeDate] || {};
+  const rows = Object.keys(wk).map(k => wk[k]);
+  const nR = rows.filter(r => r.t === 'reds').length, nW = rows.filter(r => r.t === 'whites').length;
+  let h = '<div class="field"><label for="feeDate">Match night</label><input type="date" id="feeDate" value="' + esc(feeDate) + '"></div>' +
+    '<div class="sumrow"><div class="sum"><b>' + nR + '</b><span>Reds</span></div><div class="sum"><b>' + nW + '</b><span>Whites</span></div><div class="sum"><b>' + Object.keys(av).filter(k => av[k].s === 'in').length + '</b><span>Said in</span></div></div>' +
+    '<div class="hint" style="margin:0 0 10px">Pick Reds or Whites for everyone playing that night. They are added to the game week and show in Match fees. Replies from the Availability tab show next to each name.</div>' +
+    '<button class="btn ghost sm full" data-act="pickall">Add everyone who said In (usual team)</button>';
+  const order = { in:0, maybe:1, '':2, out:3 };
+  const ps = league.players.slice().sort((a, b) => (order[(av[a.id] || {}).s || ''] - order[(av[b.id] || {}).s || '']) || a.name.localeCompare(b.name));
+  if(!ps.length) return h + '<div class="muted small" style="margin-top:12px">Add players first.</div>';
+  h += '<div style="margin-top:8px">' + ps.map(p => {
+    const r = wk[p.id], st = (av[p.id] || {}).s || '';
+    const pill = '<span class="pill ' + st + '">' + (st === 'in' ? 'In' : st === 'maybe' ? 'Maybe' : st === 'out' ? 'Out' : 'No reply') + '</span>';
+    const cur = r ? r.t : 'off';
+    return '<div class="adminrow"><div><div class="pname">' + esc(p.name) + '</div>' + pill + '</div><div class="tbtns">' +
+      [['reds','Reds'],['whites','Whites'],['off','Off']].map(t => '<button class="' + (t[0] === 'off' ? 'none' : t[0]) + (cur === t[0] ? ' sel' : '') + '" data-act="pickteam" data-pid="' + esc(p.id) + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div></div>';
+  }).join('') + '</div>';
   return h;
+}
+function feesHtml(){
+  const wk = weekRows(feeDate), keys = Object.keys(wk), rows = keys.map(k => wk[k]);
+  const coll = rows.filter(r => r.paid).reduce((a, r) => a + r.amt, 0), owed = rows.filter(r => !r.paid).reduce((a, r) => a + r.amt, 0);
+  let h = '<div class="field"><label for="feeDate">Match night</label><input type="date" id="feeDate" value="' + esc(feeDate) + '"></div>' +
+    '<div class="sumrow"><div class="sum"><b>' + rows.length + '</b><span>Playing</span></div><div class="sum"><b>' + mh(coll) + '</b><span>Paid</span></div><div class="sum"><b>' + mh(owed) + '</b><span>Owed</span></div></div>' +
+    '<div class="hint" style="margin:0 0 10px">Match fee: ' + money(league.fee) + ' per player. Only the players picked for this night are listed.</div>';
+  if(!rows.length) return h + '<div class="card empty" style="box-shadow:none;border:1.5px dashed var(--line)"><b>Nobody picked for this night</b>Pick the teams first and they will appear here.</div><button class="btn full" data-act="adminGo" data-sec="pick">Pick teams</button>';
+  h += '<button class="btn ghost sm" data-act="wkpayall" style="margin-bottom:6px">Mark all paid</button>';
+  const group = (title, team) => {
+    const ks = keys.filter(k => wk[k].t === team).sort((a, b) => wk[a].n.localeCompare(wk[b].n));
+    if(!ks.length) return '';
+    return '<div class="section-title" style="margin:14px 2px 4px">' + title + '</div>' + ks.map(k => { const r = wk[k];
+      return '<div class="adminrow"><span class="pname">' + esc(r.n) + '</span><button class="paidbtn' + (r.paid ? ' on' : '') + '" data-act="wkpay" data-pid="' + esc(k) + '">' + (r.paid ? money(r.amt) + ' paid ✓' : 'Paid ' + money(r.amt) + '?') + '</button></div>'; }).join('');
+  };
+  return h + group('Reds', 'reds') + group('Whites', 'whites');
 }
 function finStats(){
   let fees = 0, owed = 0, inn = 0, out = 0;
@@ -760,7 +790,8 @@ function renderAdmin(force){
   pl += '<div class="row" style="margin-top:14px"><input type="text" id="newName" class="grow" placeholder="New player name" maxlength="30"><select class="f" id="newTeam" style="width:auto"><option value="">No team</option><option value="reds">Reds</option><option value="whites">Whites</option></select><button class="btn sm" data-act="addPlayer">Add</button></div>';
   if(players.length) pl += '<button class="btn ghost sm full" style="margin-top:14px" data-act="delAllPlayers">Remove all players</button>';
   h += fold('players', 'Players, teams and captains (<span id="plCount">' + players.length + '</span>)', pl);
-  h += fold('fees', 'Match day and fees', feesHtml());
+  h += fold('pick', 'Pick teams for the night', pickHtml());
+  h += fold('fees', 'Match fees', feesHtml());
   h += fold('fin', 'Finances', finHtml());
 
   h += fold('next', 'Next match date',
@@ -779,7 +810,8 @@ function renderAdmin(force){
     add:['➕', 'Add result', st.complete ? 'Series finished' : 'Series ' + league.seriesNo + ': ' + st.r + '–' + st.w],
     manage:['📋', 'Edit results', all.length + (all.length === 1 ? ' result' : ' results')],
     players:['👥', 'Players & teams', players.length + (players.length === 1 ? ' player' : ' players') + ' · captains'],
-    fees:['💷', 'Match day & fees', Object.keys(weekRows(feeDate)).length + ' playing · ' + fmtDate(feeDate)],
+    pick:['👕', 'Pick teams', Object.keys(weekRows(feeDate)).length + ' picked · ' + fmtDate(feeDate)],
+    fees:['💷', 'Match fees', Object.keys(weekRows(feeDate)).length + ' playing · ' + fmtDate(feeDate)],
     fin:['🏦', 'Finances', 'Bank: ' + money(finStats().balance)],
     next:['📅', 'Next match', fmtDate(nextDate())],
     series:['🏁', 'Series & past scores', 'Series ' + league.seriesNo + ' · first to ' + league.target]
@@ -1031,9 +1063,24 @@ document.addEventListener('click', async e => {
     case 'team': await mutate(cur => { const p = cur.players.find(p => p.id === b.dataset.pid); if(p){ p.team = b.dataset.t; ['reds','whites'].forEach(t => { if(cur.captains[t] === p.id && p.team !== t) cur.captains[t] = ''; }); } }); break;
     case 'captain': await mutate(cur => { const p = cur.players.find(p => p.id === b.dataset.pid); if(p && p.team) cur.captains[p.team] = (cur.captains[p.team] === p.id) ? '' : p.id; }); break;
     case 'delAllPlayers': askConfirm('Remove ALL players? Past results keep their scorers.', async () => { if(await mutate(cur => { cur.players = []; cur.captains = { reds:'', whites:'' }; })) toast('All players removed'); }); break;
-    case 'wkplay': await mutate(cur => { const p = cur.players.find(p => p.id === b.dataset.pid); if(!p) return; const w = cur.weeks[feeDate] || (cur.weeks[feeDate] = { rows:{} }); if(w.rows[p.id]) delete w.rows[p.id]; else w.rows[p.id] = { n:p.name, t:p.team || '', paid:false, amt:cur.fee }; if(!Object.keys(w.rows).length) delete cur.weeks[feeDate]; }); break;
+    case 'pickteam': await mutate(cur => {
+      const p = cur.players.find(p => p.id === b.dataset.pid); if(!p) return;
+      const w = cur.weeks[feeDate] || (cur.weeks[feeDate] = { rows:{} }), t = b.dataset.t;
+      if(t === 'off') delete w.rows[p.id];
+      else if(w.rows[p.id]) w.rows[p.id].t = t;
+      else w.rows[p.id] = { n:p.name, t:t, paid:false, amt:cur.fee };
+      if(!Object.keys(w.rows).length) delete cur.weeks[feeDate];
+    }); break;
+    case 'pickall': {
+      const av = availBy[feeDate] || {};
+      if(await mutate(cur => {
+        const w = cur.weeks[feeDate] || (cur.weeks[feeDate] = { rows:{} });
+        cur.players.forEach(p => { if(av[p.id] && av[p.id].s === 'in' && (p.team === 'reds' || p.team === 'whites') && !w.rows[p.id]) w.rows[p.id] = { n:p.name, t:p.team, paid:false, amt:cur.fee }; });
+        if(!Object.keys(w.rows).length) delete cur.weeks[feeDate];
+      })) toast('Added everyone who said In');
+      break;
+    }
     case 'wkpay': await mutate(cur => { const w = cur.weeks[feeDate]; if(w && w.rows[b.dataset.pid]) w.rows[b.dataset.pid].paid = !w.rows[b.dataset.pid].paid; }); break;
-    case 'wkall': await mutate(cur => { const w = cur.weeks[feeDate] || (cur.weeks[feeDate] = { rows:{} }); cur.players.forEach(p => { if((p.team === 'reds' || p.team === 'whites') && !w.rows[p.id]) w.rows[p.id] = { n:p.name, t:p.team, paid:false, amt:cur.fee }; }); if(!Object.keys(w.rows).length) delete cur.weeks[feeDate]; }); break;
     case 'wkpayall': await mutate(cur => { const w = cur.weeks[feeDate]; if(w) Object.keys(w.rows).forEach(k => { w.rows[k].paid = true; }); }) && toast('All marked paid'); break;
     case 'finAdd': {
       const amt = parseFloat($('#finAmt').value); if(!(amt > 0)){ toast('Enter an amount'); break; }
@@ -1095,7 +1142,7 @@ document.addEventListener('change', e => {
   if(e.target.id === 'meSelect'){ try{ localStorage.setItem(LS_ME, e.target.value); }catch(err){} renderAvail(); }
   if(e.target.id === 'fDate'){ form.date = e.target.value; }
   if(e.target.id === 'fPlayer'){ finePid = e.target.value; }
-  if(e.target.id === 'feeDate'){ feeDate = e.target.value || lastMonday(); renderAdmin(true); }
+  if(e.target.id === 'feeDate'){ feeDate = e.target.value || defaultWeekDate(); watchAvailability(); renderAdmin(true); }
   if(e.target.id === 'finDate'){ finDate = e.target.value || todayStr(); }
   if(e.target.id === 'fineDate'){ fineDate = e.target.value || todayStr(); }
 });
@@ -1148,14 +1195,14 @@ function watchAvailability(){
   const want = {};
   if(league){
     if(!availDate){ availDate = nextDate(); calMonth = availDate.slice(0, 7); }
-    want[nextDate()] = 1; want[availDate] = 1;
+    want[nextDate()] = 1; want[availDate] = 1; if(feeDate) want[feeDate] = 1;
   }
   Object.keys(unsubs).forEach(d => { if(!want[d]){ unsubs[d](); delete unsubs[d]; delete availBy[d]; } });
   Object.keys(want).forEach(d => {
     if(unsubs[d]) return;
     unsubs[d] = db.collection('availability').doc(d).onSnapshot(s => {
       availBy[d] = s.exists ? (s.data().responses || {}) : {};
-      renderAvail(); renderHome();
+      renderAvail(); renderHome(); renderAdmin();
     }, err => { console.error(err); });
   });
   renderAvail(); renderHome();

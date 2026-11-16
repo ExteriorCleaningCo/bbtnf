@@ -668,13 +668,29 @@ function finHtml(){
 }
 
 /* ---- admin ---- */
+function playerRowsHtml(){
+  return league.players.slice().sort(byName).map(p => {
+    if(renamePid === p.id) return '<div class="adminrow"><div class="row" style="width:100%"><input type="text" id="renameIn" class="grow" value="' + esc(p.name) + '" maxlength="30"><button class="btn sm" data-act="renameSave">Save</button><button class="btn ghost sm" data-act="renameCancel">Cancel</button></div></div>';
+    return '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><div class="tbtns">' +
+      [['reds','Reds'],['whites','Whites'],['','None']].map(t => '<button class="' + (t[0] || 'none') + ((p.team || '') === t[0] ? ' sel' : '') + '" data-act="team" data-pid="' + esc(p.id) + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>' +
+      (p.team ? '<button class="cbtn' + (league.captains[p.team] === p.id ? ' sel' : '') + '" data-act="captain" data-pid="' + esc(p.id) + '">Captain</button>' : '') +
+      '<button class="linkbtn" data-act="rename" data-pid="' + esc(p.id) + '">Rename</button>' +
+      '<button class="linkbtn" data-act="delPlayer" data-pid="' + esc(p.id) + '">Remove</button></div></div>';
+  }).join('');
+}
 function fold(key, title, body){
   return '<details class="fold" data-key="' + key + '"' + (adminOpen[key] ? ' open' : '') + '><summary>' + title + '</summary><div class="fold-body">' + body + '</div></details>';
 }
 function renderAdmin(force){
   const el = $('#adminBody');
   const ae = document.activeElement;
-  if(!force && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')){ pendingAdminRender = true; return; }
+  if(!force && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')){
+    pendingAdminRender = true;
+    // keep the lists fresh without touching the box being typed in
+    const pr = $('#plRows');
+    if(league && pr && !pr.contains(ae)){ pr.innerHTML = playerRowsHtml(); const c = $('#plCount'); if(c) c.textContent = league.players.length; }
+    return;
+  }
   pendingAdminRender = false;
 
   if(!user){
@@ -720,17 +736,10 @@ function renderAdmin(force){
     '<div class="row"><button class="btn ghost sm" data-act="editMatch" data-id="' + esc(m.id) + '">Edit</button><button class="btn ghost sm" data-act="delMatch" data-id="' + esc(m.id) + '">Delete</button></div></div>').join('') : '<div class="muted small">No results yet.</div>');
 
   const players = league.players.slice().sort(byName);
-  let pl = players.map(p => {
-    if(renamePid === p.id) return '<div class="adminrow"><div class="row" style="width:100%"><input type="text" id="renameIn" class="grow" value="' + esc(p.name) + '" maxlength="30"><button class="btn sm" data-act="renameSave">Save</button><button class="btn ghost sm" data-act="renameCancel">Cancel</button></div></div>';
-    return '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><div class="tbtns">' +
-      [['reds','Reds'],['whites','Whites'],['','None']].map(t => '<button class="' + (t[0] || 'none') + ((p.team || '') === t[0] ? ' sel' : '') + '" data-act="team" data-pid="' + esc(p.id) + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>' +
-      (p.team ? '<button class="cbtn' + (league.captains[p.team] === p.id ? ' sel' : '') + '" data-act="captain" data-pid="' + esc(p.id) + '">Captain</button>' : '') +
-      '<button class="linkbtn" data-act="rename" data-pid="' + esc(p.id) + '">Rename</button>' +
-      '<button class="linkbtn" data-act="delPlayer" data-pid="' + esc(p.id) + '">Remove</button></div></div>';
-  }).join('');
+  let pl = '<div id="plRows">' + playerRowsHtml() + '</div>';
   pl += '<div class="row" style="margin-top:14px"><input type="text" id="newName" class="grow" placeholder="New player name" maxlength="30"><select class="f" id="newTeam" style="width:auto"><option value="">No team</option><option value="reds">Reds</option><option value="whites">Whites</option></select><button class="btn sm" data-act="addPlayer">Add</button></div>';
   if(players.length) pl += '<button class="btn ghost sm full" style="margin-top:14px" data-act="delAllPlayers">Remove all players</button>';
-  h += fold('players', 'Players, teams and captains (' + players.length + ')', pl);
+  h += fold('players', 'Players, teams and captains (<span id="plCount">' + players.length + '</span>)', pl);
   h += fold('fees', 'Match day and fees', feesHtml());
   h += fold('fin', 'Finances', finHtml());
 
@@ -767,19 +776,32 @@ const money = n => '£' + r2(n).toFixed(2);
 const mh = (n, signed) => { n = r2(n); const c = n > 0 ? 'pos' : (n < 0 ? 'neg' : ''); return '<span class="' + c + '">' + (n < 0 ? '−' : (signed && n > 0 ? '+' : '')) + money(Math.abs(n)) + '</span>'; };
 function curEntries(){ const f = league.fines; return f.entries.filter(e => (e.season || 1) === f.season); }
 
-function fpFold(f){
-  const rows = f.players.slice().sort(byName).map(p => renameFp === p.id
+function fpRowsHtml(f){
+  return f.players.slice().sort(byName).map(p => renameFp === p.id
     ? '<div class="adminrow"><div class="row" style="width:100%"><input type="text" id="fpRenameIn" class="grow" value="' + esc(p.name) + '" maxlength="30"><button class="btn sm" data-act="fpRenameSave">Save</button><button class="btn ghost sm" data-act="fpRenameCancel">Cancel</button></div></div>'
-    : '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><button class="linkbtn" data-act="fpRename" data-pid="' + esc(p.id) + '">Rename</button><button class="linkbtn" data-act="fpDel" data-pid="' + esc(p.id) + '">Remove</button></div></div>').join('');
+    : '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><button class="linkbtn" data-act="fpRename" data-pid="' + esc(p.id) + '">Rename</button><button class="linkbtn" data-act="fpDel" data-pid="' + esc(p.id) + '">Remove</button></div></div>').join('') || '<div class="muted small">No players yet.</div>';
+}
+function typeRowsHtml(arr, kind){
+  return arr.map(t => '<div class="adminrow"><span class="pname">' + esc(t.name) + ' · ' + (kind === 'reward' ? mh(-t.amount) : mh(t.amount)) + '</span><button class="linkbtn" data-act="delType" data-kind="' + kind + '" data-id="' + esc(t.id) + '">Remove</button></div>').join('') || '<div class="muted small">None yet.</div>';
+}
+function fpFold(f){
   const open = fineOpen.fplayers || !f.players.length;
-  return '<details class="fold" data-fkey="fplayers"' + (open ? ' open' : '') + '><summary>Pub Fines players (' + f.players.length + ')</summary><div class="fold-body">' +
-    '<div class="hint" style="margin:0 0 8px">These are separate from the team players. Add everyone who plays for fines here.</div>' + (rows || '<div class="muted small">No players yet.</div>') +
+  return '<details class="fold" data-fkey="fplayers"' + (open ? ' open' : '') + '><summary>Pub Fines players (<span id="fpCount">' + f.players.length + '</span>)</summary><div class="fold-body">' +
+    '<div class="hint" style="margin:0 0 8px">These are separate from the team players. Add everyone who plays for fines here.</div>' + '<div id="fpRows">' + fpRowsHtml(f) + '</div>' +
     '<div class="row" style="margin-top:12px"><input type="text" id="fpName" class="grow" placeholder="New player name" maxlength="30"><button class="btn sm" data-act="fpAdd">Add</button></div></div></details>';
 }
 function renderFines(force){
   const el = $('#finesBody'); if(!el) return;
   const ae = document.activeElement;
-  if(!force && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')){ pendingFinesRender = true; return; }
+  if(!force && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT')){
+    pendingFinesRender = true;
+    if(league){
+      const f2 = league.fines;
+      [['#fpRows', fpRowsHtml(f2)], ['#tRows', typeRowsHtml(f2.types, 'fine')], ['#rRows', typeRowsHtml(f2.rewards, 'reward')]].forEach(x => { const n = $(x[0]); if(n && !n.contains(ae)) n.innerHTML = x[1]; });
+      const c = $('#fpCount'); if(c) c.textContent = f2.players.length;
+    }
+    return;
+  }
   pendingFinesRender = false;
   if(!league){ el.innerHTML = loaded ? emptyLeague() : '<div class="empty">Loading…</div>'; return; }
   const f = league.fines, ents = curEntries(), edit = !!user;
@@ -846,13 +868,12 @@ function renderFines(force){
   }).join('') : '<div class="card empty"><b>No fines yet</b>Fines added by the editors will show here week by week.</div>';
 
   if(edit){
-    const typeRows = (arr, kind) => arr.map(t => '<div class="adminrow"><span class="pname">' + esc(t.name) + ' · ' + (kind === 'reward' ? mh(-t.amount) : mh(t.amount)) + '</span><button class="linkbtn" data-act="delType" data-kind="' + kind + '" data-id="' + esc(t.id) + '">Remove</button></div>').join('');
     h += '<div class="section-title">Editor tools</div>' +
       fpFold(f) + '<details class="fold" data-fkey="mgr"' + (fineOpen.mgr ? ' open' : '') + '><summary>Fine and reward types</summary><div class="fold-body">' +
       (!f.types.length && !f.rewards.length ? '<button class="btn red full" data-act="seedFines" style="margin-bottom:12px">Add the standard BBTNF fines and rewards</button>' : '') +
-      '<div class="muted small" style="font-weight:600;margin-bottom:4px">FINES</div>' + (typeRows(f.types, 'fine') || '<div class="muted small">None yet.</div>') +
+      '<div class="muted small" style="font-weight:600;margin-bottom:4px">FINES</div>' + '<div id="tRows">' + typeRowsHtml(f.types, 'fine') + '</div>' +
       '<div class="row" style="margin:10px 0 18px"><input type="text" id="tName" class="grow" placeholder="New fine" maxlength="40"><input type="number" id="tAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="fine">Add</button></div>' +
-      '<div class="muted small" style="font-weight:600;margin-bottom:4px">REWARDS</div>' + (typeRows(f.rewards, 'reward') || '<div class="muted small">None yet.</div>') +
+      '<div class="muted small" style="font-weight:600;margin-bottom:4px">REWARDS</div>' + '<div id="rRows">' + typeRowsHtml(f.rewards, 'reward') + '</div>' +
       '<div class="row" style="margin-top:10px"><input type="text" id="rName" class="grow" placeholder="New reward" maxlength="40"><input type="number" id="rAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="reward">Add</button></div></div></details>' +
       '<details class="fold" data-fkey="season"' + (fineOpen.season ? ' open' : '') + '><summary>New fines season</summary><div class="fold-body"><p class="muted small" style="margin:0 0 12px">Starts the fines list again from £0. The old season is kept safely in the database but is no longer shown.</p><button class="btn ghost full" data-act="newSeason">Start season ' + (f.season + 1) + '</button></div></details>';
   }
@@ -915,7 +936,7 @@ document.addEventListener('click', async e => {
     }
     case 'fpAdd': {
       const nm = ($('#fpName').value || '').trim(); if(!nm){ toast('Enter a name'); break; }
-      if(await mutate(cur => { cur.fines.players.push({ id:uid(), name:nm }); })){ toast(nm + ' added'); }
+      if(await mutate(cur => { cur.fines.players.push({ id:uid(), name:nm }); })){ toast(nm + ' added'); const ni = $('#fpName'); if(ni){ ni.value = ''; ni.focus(); } }
       break;
     }
     case 'fpRename': renameFp = b.dataset.pid; renderFines(true); { const i = $('#fpRenameIn'); if(i){ i.focus(); i.select(); } } break;
@@ -979,7 +1000,7 @@ document.addEventListener('click', async e => {
     case 'addPlayer': {
       const name = ($('#newName').value || '').trim(); if(!name){ toast('Enter a name'); break; }
       const team = $('#newTeam').value;
-      if(await mutate(cur => { cur.players.push({ id:uid(), name, team }); })){ toast(name + ' added'); }
+      if(await mutate(cur => { cur.players.push({ id:uid(), name, team }); })){ toast(name + ' added'); const ni = $('#newName'); if(ni){ ni.value = ''; ni.focus(); } }
       break;
     }
     case 'setNext': { const v = $('#nextDate').value; if(!v){ toast('Pick a date'); break; } if(!isMonday(v)){ toast('Games are on Mondays — pick a Monday'); break; } if(await mutate(cur => { cur.nextMatch = v; })) toast('Next match date saved'); break; }
@@ -1007,7 +1028,7 @@ document.addEventListener('click', async e => {
       const rw = b.dataset.kind === 'reward';
       const name = ($(rw ? '#rName' : '#tName').value || '').trim(), amt = parseFloat($(rw ? '#rAmt' : '#tAmt').value);
       if(!name || !(amt > 0)){ toast('Enter a name and amount'); break; }
-      if(await mutate(cur => { (rw ? cur.fines.rewards : cur.fines.types).push({ id:uid(), name, amount:amt }); })) toast('Added'); break;
+      if(await mutate(cur => { (rw ? cur.fines.rewards : cur.fines.types).push({ id:uid(), name, amount:amt }); })){ toast('Added'); ['#tName','#tAmt','#rName','#rAmt'].forEach(q => { const el2 = $(q); if(el2 && ((rw && q[1] === 'r') || (!rw && q[1] === 't'))) el2.value = ''; }); const first = $(rw ? '#rName' : '#tName'); if(first) first.focus(); } break;
     }
     case 'delType': { const rw = b.dataset.kind === 'reward';
       await mutate(cur => { const k = rw ? 'rewards' : 'types'; cur.fines[k] = cur.fines[k].filter(t => t.id !== b.dataset.id); }); break; }

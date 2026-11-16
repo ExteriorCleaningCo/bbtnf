@@ -550,7 +550,7 @@ function renderTeams(){
   let h = teamsCaptainsHtml();
   if(!h) h = '<div class="card empty"><b>No teams yet</b>Teams and captains will show here once an admin picks them.</div>';
   const un = league.players.filter(p => p.team !== 'reds' && p.team !== 'whites').sort(byName);
-  if(un.length) h += '<div class="section-title">Not picked yet</div><div class="card">' + un.map(p => '<div class="prow"><span class="pname">' + esc(p.name) + '</span></div>').join('') + '</div>';
+  if(un.length) h += '<div class="section-title">Floaters</div><div class="card">' + un.map(p => '<div class="prow"><span class="pname">' + esc(p.name) + '</span></div>').join('') + '</div>';
   h += '<div class="muted small" style="text-align:center">⚽ = goals this series</div>';
   el.innerHTML = h;
 }
@@ -638,7 +638,7 @@ function renderAvail(){
   };
   h += group('Reds', league.players.filter(p => p.team === 'reds'));
   h += group('Whites', league.players.filter(p => p.team === 'whites'));
-  h += group('Not picked yet', league.players.filter(p => p.team !== 'reds' && p.team !== 'whites'));
+  h += group('Floaters', league.players.filter(p => p.team !== 'reds' && p.team !== 'whites'));
   el.innerHTML = h;
 }
 
@@ -784,7 +784,7 @@ function renderAdmin(force){
   const playerOpts = ['reds','whites',''].map(t => {
     const ps = league.players.filter(p => (p.team || '') === t).sort(byName);
     if(!ps.length) return '';
-    return '<optgroup label="' + (t === 'reds' ? 'Reds' : t === 'whites' ? 'Whites' : 'Not picked yet') + '">' + ps.map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('') + '</optgroup>';
+    return '<optgroup label="' + (t === 'reds' ? 'Reds' : t === 'whites' ? 'Whites' : 'Floaters') + '">' + ps.map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('') + '</optgroup>';
   }).join('');
 
   let add = '';

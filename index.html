@@ -430,7 +430,7 @@ const STD_REWARDS = [['GK Clean Sheet',2],['Hattrick',2]];
 
 try{ const c = localStorage.getItem(LS_CACHE); if(c){ league = normalize(JSON.parse(c)); loaded = true; } }catch(e){}
 
-function newForm(){ return { id:null, seriesNo:null, date:lastMonday(), reds:0, whites:0, scorers:[], sg:1 }; }
+function newForm(){ return { id:null, seriesNo:null, date:defaultWeekDate(), reds:0, whites:0, scorers:[], sg:1 }; }
 
 /* ---- series maths ---- */
 function matchesOf(n){ return (league ? league.matches : []).filter(m => (m.seriesNo || 1) === n); }
@@ -601,13 +601,14 @@ let statScope = 'year';
 function statsHtml(){
   const yr = voteYear(), sn = league.seriesNo;
   const ms = league.matches.filter(m => statScope === 'series' ? (m.seriesNo || 1) === sn : (m.date || '').slice(0, 4) === String(yr));
-  const st = {};
+  const st = {}, noTeams = [];
   const get = pid => st[pid] || (st[pid] = { p:0, w:0, d:0, l:0, g:0 });
   ms.forEach(m => {
-    const rows = ((league.weeks[m.date] || {}).rows) || {};
+    const rows = rosterOf(m);
+    if(!Object.keys(rows).length) noTeams.push(fmtDate(m.date));
     const win = m.reds > m.whites ? 'reds' : m.whites > m.reds ? 'whites' : 'draw';
     Object.keys(rows).forEach(pid => {
-      const t = rows[pid].t; if(t !== 'reds' && t !== 'whites') return;
+      const t = rows[pid];
       const x = get(pid); x.p++;
       if(win === 'draw') x.d++; else if(win === t) x.w++; else x.l++;
     });
@@ -616,6 +617,7 @@ function statsHtml(){
   const list = Object.keys(st).map(pid => { const pl = league.players.find(p => p.id === pid); const x = st[pid]; return Object.assign({ name: pl ? pl.name : '(removed)', pct: x.p ? Math.round(x.w / x.p * 100) : 0 }, x); })
     .sort((a,b) => b.pct - a.pct || b.p - a.p || b.g - a.g || a.name.localeCompare(b.name));
   let h = '<div class="seg" style="margin-bottom:12px"><button data-act="statscope" data-v="year" class="' + (statScope === 'year' ? 'active' : '') + '">' + yr + ' season</button><button data-act="statscope" data-v="series" class="' + (statScope === 'series' ? 'active' : '') + '">This series</button></div>';
+  if(noTeams.length) h += '<div class="warn">⚠ No teams were picked for: ' + noTeams.map(esc).join(', ') + '. Players can\'t be counted for those results — use Pick teams for that date.</div>';
   if(!list.length) return h + '<div class="muted small">No stats yet. They build up from the teams you pick each week (Pick teams) and the results you add.</div>';
   const cols = 'display:grid;grid-template-columns:minmax(0,1fr) 26px 26px 26px 26px 42px 30px;gap:4px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;text-align:center';
   h += '<div style="' + cols + ';font-size:11px;font-weight:600;color:var(--muted)"><span style="text-align:left">Player</span><span>P</span><span>W</span><span>D</span><span>L</span><span>Win%</span><span>⚽</span></div>';
@@ -747,6 +749,12 @@ function renderAvail(){
 
 
 /* ---- match fees and finances ---- */
+function rosterOf(m){
+  const rows = ((league.weeks[m.date] || {}).rows) || {}, out = {};
+  Object.keys(rows).forEach(k => { if(rows[k].t === 'reds' || rows[k].t === 'whites') out[k] = rows[k].t; });
+  if(Object.keys(out).length) return out;
+  return m.roster || {};
+}
 function weekRows(date){ return ((league.weeks[date] || {}).rows) || {}; }
 let autoBusy = false;
 async function autoAssign(){
@@ -791,6 +799,8 @@ function feesHtml(){
   let h = '<div class="field"><label for="feeDate">Match night</label><input type="date" id="feeDate" value="' + esc(feeDate) + '"></div>' +
     '<div class="sumrow"><div class="sum"><b>' + rows.length + '</b><span>Playing</span></div><div class="sum"><b>' + mh(coll) + '</b><span>Paid</span></div><div class="sum"><b>' + mh(owed) + '</b><span>Owed</span></div></div>' +
     '<div class="hint" style="margin:0 0 10px">Match fee: ' + money(league.fee) + ' per player. Only the players picked for this night are listed.</div>';
+  const fm = league.matches.find(x => x.date === feeDate);
+  if(fm) h += '<div class="hint" style="margin:0 0 10px">Result for this night: Reds ' + fm.reds + ' – ' + fm.whites + ' Whites ✓ (counts in Stats)</div>';
   if(!rows.length) return h + '<div class="card empty" style="box-shadow:none;border:1.5px dashed var(--line)"><b>Nobody picked for this night</b>Pick the teams first and they will appear here.</div><button class="btn full" data-act="adminGo" data-sec="pick">Pick teams</button>';
   h += '<button class="btn ghost sm" data-act="wkpayall" style="margin-bottom:6px">Mark all paid</button>';
   const group = (title, team) => {
@@ -890,7 +900,7 @@ function renderAdmin(force){
   let add = '';
   if(st.complete && !editing) add += '<div class="warn">This series is finished. Start a new series (below) before adding more results.</div>';
   if(editing) add += '<div class="editbar"><span>Editing a result</span><button class="linkbtn" data-act="cancelEdit">Cancel</button></div>';
-  add += '<div class="field"><label for="fDate">Match date</label><input type="date" id="fDate" value="' + esc(form.date) + '"></div>' +
+  add += '<div class="field"><label for="fDate">Match date</label><input type="date" id="fDate" value="' + esc(form.date) + '"><div class="hint" id="fRoster"></div></div>' +
     '<div class="score-row"><div class="score-side reds"><div class="nm">REDS</div><div class="stepper"><button data-act="rd-">−</button><span class="v" id="fRed">' + form.reds + '</span><button data-act="rd+">+</button></div></div>' +
     '<div class="score-side whites"><div class="nm">WHITES</div><div class="stepper"><button data-act="wh-">−</button><span class="v" id="fWhite">' + form.whites + '</span><button data-act="wh+">+</button></div></div></div>' +
     '<div class="field"><label for="fScorer">Add a scorer</label><div class="row"><select class="f grow" id="fScorer">' + playerOpts + '</select>' +
@@ -968,6 +978,11 @@ function refreshForm(){
   if(lr !== form.reds) bits.push('Reds: ' + lr + ' of ' + form.reds + ' goals have a scorer');
   if(lw !== form.whites) bits.push('Whites: ' + lw + ' of ' + form.whites + ' goals have a scorer');
   $('#fHint').textContent = bits.length ? bits.join(' · ') + ' (own goals can be left out)' : (form.scorers.length ? 'All goals have a scorer ✓' : '');
+  const ro = $('#fRoster');
+  if(ro && league){
+    const rr = weekRows(form.date), nr = Object.keys(rr).filter(k => rr[k].t === 'reds').length, nw = Object.keys(rr).filter(k => rr[k].t === 'whites').length;
+    ro.textContent = (nr + nw) ? '✓ ' + nr + ' Reds + ' + nw + ' Whites picked for this night. They count towards Stats and fees.' : '⚠ No teams picked for this date yet. Use Pick teams first so players count in Stats and fees.';
+  }
   $('#saveBtn').textContent = form.id ? 'Save changes' : 'Save result';
 }
 
@@ -1103,11 +1118,17 @@ async function saveMatch(){
   const editing = !!form.id;
   if(!editing && seriesState(league.seriesNo).complete){ toast('Series finished — start a new one first'); return; }
   const m = { id:form.id || uid(), seriesNo:form.seriesNo || league.seriesNo, date:form.date, reds:form.reds, whites:form.whites, scorers:form.scorers.map(s => Object.assign({}, s)) };
+  let hadTeams = true;
   const ok = await mutate(cur => {
+    const old = editing ? cur.matches.find(x => x.id === m.id) : null;
+    const rows = ((cur.weeks[m.date] || {}).rows) || {}, ro = {};
+    Object.keys(rows).forEach(k => { if(rows[k].t === 'reds' || rows[k].t === 'whites') ro[k] = rows[k].t; });
+    hadTeams = Object.keys(ro).length > 0;
+    if(hadTeams) m.roster = ro; else if(old && old.roster) m.roster = old.roster; else delete m.roster;
     if(editing){ const i = cur.matches.findIndex(x => x.id === m.id); if(i >= 0) cur.matches[i] = m; else cur.matches.push(m); }
     else { m.seriesNo = cur.seriesNo; cur.matches.push(m); }
   });
-  if(ok){ toast(editing ? 'Result updated' : 'Result saved'); form = newForm(); adminOpen.add = true; renderAdmin(true); }
+  if(ok){ toast((editing ? 'Result updated' : 'Result saved') + (hadTeams ? '' : ' — no teams picked for that date, so no player stats')); form = newForm(); adminOpen.add = true; renderAdmin(true); }
 }
 
 document.addEventListener('click', async e => {
@@ -1307,7 +1328,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', e => {
   if(e.target.classList && e.target.classList.contains('vsel')){ ballot[e.target.dataset.cat] = e.target.value; }
-  if(e.target.id === 'fDate'){ form.date = e.target.value; }
+  if(e.target.id === 'fDate'){ form.date = e.target.value; refreshForm(); }
   if(e.target.id === 'fPlayer'){ finePid = e.target.value; }
   if(e.target.id === 'feeDate'){ feeDate = e.target.value || defaultWeekDate(); watchAvailability(); renderAdmin(true); }
   if(e.target.id === 'finDate'){ finDate = e.target.value || todayStr(); }

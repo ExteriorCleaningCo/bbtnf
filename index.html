@@ -80,14 +80,14 @@
   .m-score .tn{font-size:13px;letter-spacing:.5px}
   .m-scorers{font-size:13.5px;line-height:1.5}
   .m-scorers b{font-weight:600}
-  .m-scorers .r{color:var(--red-dark)}
+  .m-scorers .r{color:#C8102E}
   .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:.4px}
-  .badge.reds{background:var(--red);color:#fff}
+  .badge.reds{background:#C8102E;color:#fff}
   .badge.whites{background:#fff;color:var(--ink);border:1.5px solid var(--ink)}
   .badge.draw{background:var(--line);color:var(--muted)}
 
   .chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
-  .chip.reds{background:var(--red);color:#fff}
+  .chip.reds{background:#C8102E;color:#fff}
   .chip.whites{background:#fff;color:var(--ink);border:1.5px solid var(--ink)}
   .chip.none{background:var(--line);color:var(--muted)}
 
@@ -102,8 +102,10 @@
   /* teams */
   .teams-grid{display:grid;grid-template-columns:1fr;gap:12px}
   .team{border-top:6px solid var(--ink)}
-  .team.reds{border-top-color:var(--red)}
-  .team.whites{border-top-color:#C9C9C2}
+  .team.reds{background:#C8102E;color:#fff;border-top:none}
+  .team.reds .muted,.team.reds .pgoals{color:rgba(255,255,255,.85)}
+  .team.reds .prow{border-bottom-color:rgba(255,255,255,.28)}
+  .team.whites{background:#fff;border:2px solid var(--ink)}
   .team-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
   .prow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:15.5px}
   .prow:last-child{border-bottom:none}
@@ -185,7 +187,7 @@
   .adminrow:last-child{border-bottom:none}
   .tbtns{display:flex;gap:5px}
   .tbtns button{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:600}
-  .tbtns button.sel.reds{background:var(--red);color:#fff;border-color:var(--red)}
+  .tbtns button.sel.reds{background:#C8102E;color:#fff;border-color:#C8102E}
   .tbtns button.sel.whites{background:#fff;color:var(--ink);border:2px solid var(--ink)}
   .tbtns button.sel.none{background:var(--line)}
   .linkbtn{background:none;border:none;color:var(--red-dark);font-weight:600;font-size:13px;padding:6px}
@@ -221,7 +223,10 @@
   .erow .el{flex:1;min-width:120px}
   .erow .ed{font-size:12px;color:var(--muted)}
   .erow .ea{font-family:var(--mono);font-weight:500}
-  .erow .ea.neg{color:var(--green)}
+  .pos{color:#1B8A4B}
+  .neg{color:#C8102E}
+  .fhero .pos{color:#4ADE80}
+  .fhero .neg{color:#FF7B7B}
   .paidbtn{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:600}
   .paidbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
   nav.tabs button{font-size:10px}
@@ -243,7 +248,7 @@
   .cal-d.today{text-decoration:underline}
   .teamsrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
   .tcol{padding:14px 12px;margin-bottom:0;min-width:0}
-  .tcol.reds{background:var(--ink);color:#fff}
+  .tcol.reds{background:#C8102E;color:#fff}
   .tcol.whites{border:2px solid var(--ink)}
   .tc-head{font-size:12px;letter-spacing:1.5px;font-weight:600}
   .tc-cap{margin:8px 0 10px;padding:8px;border-radius:10px;background:rgba(128,128,128,.2)}
@@ -342,14 +347,14 @@ function showBanner(msg, bad){ const b = $('#banner'); b.textContent = msg; b.cl
 function hideBanner(){ $('#banner').style.display = 'none'; }
 
 /* ================= data ================= */
-function defaultFines(){ return { season:1, types:[], rewards:[], entries:[] }; }
+function defaultFines(){ return { season:1, players:[], types:[], rewards:[], entries:[] }; }
 function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, weeks:{}, fee:5, finance:{opening:0,entries:[]} }; }
 function normalize(d){
   const o = Object.assign(defaultLeague(), d || {});
   o.players = o.players || []; o.matches = o.matches || [];
   o.target = Number(o.target) || 10; o.seriesNo = Number(o.seriesNo) || 1;
   const f = Object.assign(defaultFines(), o.fines || {});
-  f.types = f.types || []; f.rewards = f.rewards || []; f.entries = f.entries || []; f.season = Number(f.season) || 1;
+  f.players = f.players || []; f.types = f.types || []; f.rewards = f.rewards || []; f.entries = f.entries || []; f.season = Number(f.season) || 1;
   o.fines = f;
   o.captains = Object.assign({ reds:'', whites:'' }, o.captains || {});
   o.seriesMeta = o.seriesMeta || {}; o.weeks = o.weeks || {};
@@ -368,7 +373,7 @@ let scorerScope = 'series';
 let currentTab = 'home';
 let adminOpen = { add:true };
 let form = newForm();
-let feeDate = '', finDate = '';
+let feeDate = '', finDate = '', renamePid = '', renameFp = '';
 let pendingAdminRender = false, pendingFinesRender = false;
 let finePid = '', fineDate = todayStr(), fineOpen = {};
 const STD_FINES = [['Bad Shot',1],['Bad Passing',1],['Bad Tackle',1],['Megs',1],['Stupid False Calling',1],['Goalkeeper Howler',1],['Temper Tantrum',1],['No Pub',1],['Clearing Small Fence',1],['Losing Head',2],['Clearing Nantwich Town Fence',2.5],['GK Conceding 3+ Goals',2.5],['Giving Away a Penalty',2.5],['Missing Penalty',5]];
@@ -622,7 +627,7 @@ function feesHtml(){
   const wk = weekRows(feeDate), rows = Object.keys(wk).map(k => wk[k]);
   const coll = rows.filter(r => r.paid).reduce((a, r) => a + r.amt, 0), owed = rows.filter(r => !r.paid).reduce((a, r) => a + r.amt, 0);
   let h = '<div class="field"><label for="feeDate">Match day</label><input type="date" id="feeDate" value="' + esc(feeDate) + '"></div>' +
-    '<div class="sumrow"><div class="sum"><b>' + rows.length + '</b><span>Playing</span></div><div class="sum"><b>' + money(coll) + '</b><span>Paid</span></div><div class="sum"><b>' + money(owed) + '</b><span>Owed</span></div></div>' +
+    '<div class="sumrow"><div class="sum"><b>' + rows.length + '</b><span>Playing</span></div><div class="sum"><b>' + mh(coll) + '</b><span>Paid</span></div><div class="sum"><b>' + mh(owed) + '</b><span>Owed</span></div></div>' +
     '<div class="hint" style="margin:0 0 10px">Match fee: ' + money(league.fee) + ' per player. Tap Playing for everyone who played, then tick who has paid.</div>' +
     '<div class="row" style="margin-bottom:6px"><button class="btn ghost sm" data-act="wkall">Add everyone on a team</button><button class="btn ghost sm" data-act="wkpayall">Mark all paid</button></div>';
   const group = (title, ps) => !ps.length ? '' : '<div class="section-title" style="margin:14px 2px 4px">' + title + '</div>' + ps.slice().sort(byName).map(p => {
@@ -643,11 +648,11 @@ function finStats(){
 }
 function finHtml(){
   const f = finStats();
-  let h = '<div class="finrow"><span>Opening balance</span><span>' + money(f.open) + '</span></div>' +
-    '<div class="finrow"><span>Match fees paid</span><span>+' + money(f.fees) + '</span></div>' +
-    '<div class="finrow"><span>Other money in</span><span>+' + money(f.inn) + '</span></div>' +
-    '<div class="finrow"><span>Money out</span><span>−' + money(f.out) + '</span></div>' +
-    '<div class="finrow total"><span>Should be in the bank</span><span>' + money(f.balance) + '</span></div>' +
+  let h = '<div class="finrow"><span>Opening balance</span><span>' + mh(f.open) + '</span></div>' +
+    '<div class="finrow"><span>Match fees paid</span><span>' + mh(f.fees, true) + '</span></div>' +
+    '<div class="finrow"><span>Other money in</span><span>' + mh(f.inn, true) + '</span></div>' +
+    '<div class="finrow"><span>Money out</span><span>' + mh(-f.out) + '</span></div>' +
+    '<div class="finrow total"><span>Should be in the bank</span><span>' + mh(f.balance) + '</span></div>' +
     '<div class="hint" style="margin-bottom:14px">Match fees still owed: ' + money(f.owed) + ' (not counted until paid).</div>';
   h += '<div class="section-title" style="margin:6px 2px 8px">Add money in or out</div>' +
     '<div class="field"><label for="finDate">Date</label><input type="date" id="finDate" value="' + esc(finDate) + '"></div>' +
@@ -655,7 +660,7 @@ function finHtml(){
     '<div class="row" style="margin-top:8px"><button class="btn sm grow" data-act="finAdd" data-kind="in">Money in</button><button class="btn ghost sm grow" data-act="finAdd" data-kind="out">Money out</button></div>';
   const es = league.finance.entries.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if(es.length) h += '<div class="section-title" style="margin:18px 2px 4px">Money in and out (' + es.length + ')</div>' + es.map(e =>
-    '<div class="erow"><div class="el"><div>' + esc(e.note) + '</div><div class="ed">' + esc(fmtDate(e.date)) + '</div></div><span class="ea' + (e.type === 'in' ? '' : ' neg') + '">' + (e.type === 'in' ? '+' : '−') + money(e.amount) + '</span><button class="linkbtn" data-act="finDel" data-id="' + esc(e.id) + '" aria-label="Delete">✕</button></div>').join('');
+    '<div class="erow"><div class="el"><div>' + esc(e.note) + '</div><div class="ed">' + esc(fmtDate(e.date)) + '</div></div><span class="ea ' + (e.type === 'in' ? 'pos' : 'neg') + '">' + (e.type === 'in' ? '+' : '−') + money(e.amount) + '</span><button class="linkbtn" data-act="finDel" data-id="' + esc(e.id) + '" aria-label="Delete">✕</button></div>').join('');
   h += '<div class="section-title" style="margin:18px 2px 8px">Settings</div>' +
     '<div class="field"><label for="feeIn">Match fee per player (£)</label><div class="row"><input type="number" id="feeIn" inputmode="decimal" step="0.5" min="0" value="' + league.fee + '" style="width:110px"><button class="btn sm" data-act="setFee">Save</button></div></div>' +
     '<div class="field"><label for="openIn">Opening bank balance (£)</label><div class="row"><input type="number" id="openIn" inputmode="decimal" step="0.01" value="' + league.finance.opening + '" style="width:110px"><button class="btn sm" data-act="setOpen">Save</button></div><div class="hint">What the account held before you started tracking here.</div></div>';
@@ -715,10 +720,14 @@ function renderAdmin(force){
     '<div class="row"><button class="btn ghost sm" data-act="editMatch" data-id="' + esc(m.id) + '">Edit</button><button class="btn ghost sm" data-act="delMatch" data-id="' + esc(m.id) + '">Delete</button></div></div>').join('') : '<div class="muted small">No results yet.</div>');
 
   const players = league.players.slice().sort(byName);
-  let pl = players.map(p => '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><div class="tbtns">' +
-    [['reds','Reds'],['whites','Whites'],['','None']].map(t => '<button class="' + (t[0] || 'none') + ((p.team || '') === t[0] ? ' sel' : '') + '" data-act="team" data-pid="' + esc(p.id) + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') +
-    '</div>' + (p.team ? '<button class="cbtn' + (league.captains[p.team] === p.id ? ' sel' : '') + '" data-act="captain" data-pid="' + esc(p.id) + '">Captain</button>' : '') +
-    '<button class="linkbtn" data-act="delPlayer" data-pid="' + esc(p.id) + '">Remove</button></div></div>').join('');
+  let pl = players.map(p => {
+    if(renamePid === p.id) return '<div class="adminrow"><div class="row" style="width:100%"><input type="text" id="renameIn" class="grow" value="' + esc(p.name) + '" maxlength="30"><button class="btn sm" data-act="renameSave">Save</button><button class="btn ghost sm" data-act="renameCancel">Cancel</button></div></div>';
+    return '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><div class="tbtns">' +
+      [['reds','Reds'],['whites','Whites'],['','None']].map(t => '<button class="' + (t[0] || 'none') + ((p.team || '') === t[0] ? ' sel' : '') + '" data-act="team" data-pid="' + esc(p.id) + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>' +
+      (p.team ? '<button class="cbtn' + (league.captains[p.team] === p.id ? ' sel' : '') + '" data-act="captain" data-pid="' + esc(p.id) + '">Captain</button>' : '') +
+      '<button class="linkbtn" data-act="rename" data-pid="' + esc(p.id) + '">Rename</button>' +
+      '<button class="linkbtn" data-act="delPlayer" data-pid="' + esc(p.id) + '">Remove</button></div></div>';
+  }).join('');
   pl += '<div class="row" style="margin-top:14px"><input type="text" id="newName" class="grow" placeholder="New player name" maxlength="30"><select class="f" id="newTeam" style="width:auto"><option value="">No team</option><option value="reds">Reds</option><option value="whites">Whites</option></select><button class="btn sm" data-act="addPlayer">Add</button></div>';
   if(players.length) pl += '<button class="btn ghost sm full" style="margin-top:14px" data-act="delAllPlayers">Remove all players</button>';
   h += fold('players', 'Players, teams and captains (' + players.length + ')', pl);
@@ -755,7 +764,18 @@ function refreshForm(){
 /* ---- pub fines ---- */
 const r2 = n => Math.round(n * 100) / 100;
 const money = n => '£' + r2(n).toFixed(2);
+const mh = (n, signed) => { n = r2(n); const c = n > 0 ? 'pos' : (n < 0 ? 'neg' : ''); return '<span class="' + c + '">' + (n < 0 ? '−' : (signed && n > 0 ? '+' : '')) + money(Math.abs(n)) + '</span>'; };
 function curEntries(){ const f = league.fines; return f.entries.filter(e => (e.season || 1) === f.season); }
+
+function fpFold(f){
+  const rows = f.players.slice().sort(byName).map(p => renameFp === p.id
+    ? '<div class="adminrow"><div class="row" style="width:100%"><input type="text" id="fpRenameIn" class="grow" value="' + esc(p.name) + '" maxlength="30"><button class="btn sm" data-act="fpRenameSave">Save</button><button class="btn ghost sm" data-act="fpRenameCancel">Cancel</button></div></div>'
+    : '<div class="adminrow"><span class="pname">' + esc(p.name) + '</span><div class="row"><button class="linkbtn" data-act="fpRename" data-pid="' + esc(p.id) + '">Rename</button><button class="linkbtn" data-act="fpDel" data-pid="' + esc(p.id) + '">Remove</button></div></div>').join('');
+  const open = fineOpen.fplayers || !f.players.length;
+  return '<details class="fold" data-fkey="fplayers"' + (open ? ' open' : '') + '><summary>Pub Fines players (' + f.players.length + ')</summary><div class="fold-body">' +
+    '<div class="hint" style="margin:0 0 8px">These are separate from the team players. Add everyone who plays for fines here.</div>' + (rows || '<div class="muted small">No players yet.</div>') +
+    '<div class="row" style="margin-top:12px"><input type="text" id="fpName" class="grow" placeholder="New player name" maxlength="30"><button class="btn sm" data-act="fpAdd">Add</button></div></div></details>';
+}
 function renderFines(force){
   const el = $('#finesBody'); if(!el) return;
   const ae = document.activeElement;
@@ -766,7 +786,7 @@ function renderFines(force){
 
   // per-player stats
   const map = {};
-  league.players.forEach(p => { map[p.id] = { id:p.id, name:p.name, fined:0, rew:0, coll:0, ents:[] }; });
+  f.players.forEach(p => { map[p.id] = { id:p.id, name:p.name, fined:0, rew:0, coll:0, ents:[] }; });
   ents.forEach(e => {
     const k = e.playerId;
     if(!map[k]) map[k] = { id:k, name:e.name, fined:0, rew:0, coll:0, ents:[] };
@@ -779,17 +799,17 @@ function renderFines(force){
   rows.forEach(m => { tFined += m.fined - m.rew; tColl += m.coll; tOwing += m.owing; });
   rows.sort((a,b) => (b.coll - a.coll) || (b.owing - a.owing) || a.name.localeCompare(b.name));
 
-  let h = '<div class="fhero"><div class="hero-label">Collected to date · Season ' + f.season + '</div><div class="big">' + money(tColl) + '</div></div>' +
-    '<div class="sumrow"><div class="sum"><b>' + money(tFined) + '</b><span>Fined</span></div><div class="sum"><b>' + money(tColl) + '</b><span>Collected</span></div><div class="sum"><b>' + money(tOwing) + '</b><span>Owing</span></div></div>';
+  let h = '<div class="fhero"><div class="hero-label">Collected to date · Season ' + f.season + '</div><div class="big">' + mh(tColl) + '</div></div>' +
+    '<div class="sumrow"><div class="sum"><b>' + mh(tFined) + '</b><span>Fined</span></div><div class="sum"><b>' + mh(tColl) + '</b><span>Collected</span></div><div class="sum"><b>' + mh(tOwing) + '</b><span>Owing</span></div></div>';
 
   if(edit){
-    const opts = '<option value="">Pick a player…</option>' + league.players.slice().sort(byName).map(p => '<option value="' + esc(p.id) + '"' + (p.id === finePid ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
+    const opts = '<option value="">Pick a player…</option>' + f.players.slice().sort(byName).map(p => '<option value="' + esc(p.id) + '"' + (p.id === finePid ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
     h += '<div class="card"><h2>Add a fine</h2>' +
       '<div class="field" style="margin-top:12px"><label for="fineDate">Date</label><input type="date" id="fineDate" value="' + esc(fineDate) + '"></div>' +
-      '<div class="field"><label for="fPlayer">Player</label><select class="f" id="fPlayer">' + opts + '</select></div>';
-    if(f.types.length) h += '<div class="fgrid">' + f.types.map(t => '<button class="fchip" data-act="addFine" data-kind="fine" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b>' + money(t.amount) + '</b></button>').join('') + '</div>';
+      '<div class="field"><label for="fPlayer">Player</label><select class="f" id="fPlayer">' + opts + '</select></div>' + (f.players.length ? '' : '<div class="hint" style="margin:-6px 0 12px">No players yet. Add them in Editor tools below (Pub Fines players).</div>');
+    if(f.types.length) h += '<div class="fgrid">' + f.types.map(t => '<button class="fchip" data-act="addFine" data-kind="fine" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b class="pos">' + money(t.amount) + '</b></button>').join('') + '</div>';
     else h += '<div class="hint">No fine types yet. Open "Fine and reward types" at the bottom to add the standard list.</div>';
-    if(f.rewards.length) h += '<div class="section-title" style="margin:16px 2px 8px">Rewards (take money off)</div><div class="fgrid">' + f.rewards.map(t => '<button class="fchip rw" data-act="addFine" data-kind="reward" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b>−' + money(t.amount) + '</b></button>').join('') + '</div>';
+    if(f.rewards.length) h += '<div class="section-title" style="margin:16px 2px 8px">Rewards (take money off)</div><div class="fgrid">' + f.rewards.map(t => '<button class="fchip rw" data-act="addFine" data-kind="reward" data-id="' + esc(t.id) + '"><span>' + esc(t.name) + '</span><b class="neg">−' + money(t.amount) + '</b></button>').join('') + '</div>';
     h += '<div class="section-title" style="margin:16px 2px 8px">Something else</div><div class="row"><input type="text" id="fCustName" class="grow" placeholder="What for?" maxlength="40"><input type="number" id="fCustAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:90px"></div>' +
       '<div class="row" style="margin-top:8px"><button class="btn sm grow" data-act="addCustom" data-kind="fine">Add fine</button><button class="btn ghost sm grow" data-act="addCustom" data-kind="reward">Add reward</button></div></div>';
   } else {
@@ -803,11 +823,11 @@ function renderFines(force){
     const key = 'p:' + m.id;
     const list = m.ents.slice().sort((a,b) => (b.date||'').localeCompare(a.date||'')).map(e =>
       '<div class="erow"><div class="el"><div>' + esc(e.label) + '</div><div class="ed">' + esc(fmtDate(e.date)) + '</div></div>' +
-      '<span class="ea' + (e.amount < 0 ? ' neg' : '') + '">' + (e.amount < 0 ? '−' : '') + money(Math.abs(e.amount)) + '</span>' +
+      '<span class="ea ' + (e.amount < 0 ? 'neg' : 'pos') + '">' + (e.amount < 0 ? '−' : '') + money(Math.abs(e.amount)) + '</span>' +
       (e.amount > 0 ? (edit ? '<button class="paidbtn' + (e.paid ? ' on' : '') + '" data-act="togglePaid" data-id="' + esc(e.id) + '">' + (e.paid ? 'Paid ✓' : 'Mark paid') + '</button>' : '<span class="pill' + (e.paid ? ' in' : '') + '">' + (e.paid ? 'Paid' : 'Owing') + '</span>') : '') +
       (edit ? '<button class="linkbtn" data-act="delEntry" data-id="' + esc(e.id) + '" aria-label="Delete">✕</button>' : '') + '</div>').join('');
-    return '<details class="pf" data-fkey="' + esc(key) + '"' + (fineOpen[key] ? ' open' : '') + '><summary><div class="pf-main"><span class="pname">' + esc(m.name) + '</span><span class="pf-amt">' + money(m.coll) + '</span></div>' +
-      '<div class="sbar"><i style="width:' + pct + '%"></i></div><div class="pf-sub"><span>' + pct + '% of pot</span><span>' + (m.owing > 0 ? 'Owes ' + money(m.owing) : 'All paid') + '</span></div></summary>' +
+    return '<details class="pf" data-fkey="' + esc(key) + '"' + (fineOpen[key] ? ' open' : '') + '><summary><div class="pf-main"><span class="pname">' + esc(m.name) + '</span><span class="pf-amt">' + mh(m.coll) + '</span></div>' +
+      '<div class="sbar"><i style="width:' + pct + '%"></i></div><div class="pf-sub"><span>' + pct + '% of pot</span><span>' + (m.owing > 0 ? 'Owes ' + mh(m.owing) : 'All paid') + '</span></div></summary>' +
       '<div class="pf-body">' + (list || '<div class="muted small">No fines yet.</div>') +
       (edit && m.owing > 0 ? '<button class="btn ghost sm full" style="margin-top:10px" data-act="payAll" data-pid="' + esc(m.id) + '">Mark everything paid (' + money(m.owing) + ')</button>' : '') + '</div></details>';
   }).join('') || '<div class="empty">No players yet.</div>';
@@ -821,14 +841,14 @@ function renderFines(force){
     const es = byDate[d]; let fi = 0, pa = 0;
     es.forEach(e => { fi += e.amount; if(e.amount > 0 && e.paid) pa += e.amount; });
     const key = 'w:' + d;
-    return '<details class="fold" data-fkey="' + esc(key) + '"' + (fineOpen[key] ? ' open' : '') + '><summary><span>' + esc(fmtDate(d)) + '</span><span class="muted small" style="margin-left:auto">' + money(fi) + ' fined · ' + money(pa) + ' paid</span></summary><div class="fold-body">' +
-      es.slice().sort((a,b) => a.name.localeCompare(b.name)).map(e => '<div class="erow"><div class="el"><b>' + esc(e.name) + '</b> · ' + esc(e.label) + '</div><span class="ea' + (e.amount < 0 ? ' neg' : '') + '">' + (e.amount < 0 ? '−' : '') + money(Math.abs(e.amount)) + '</span>' + (e.amount > 0 ? '<span class="pill' + (e.paid ? ' in' : '') + '">' + (e.paid ? 'Paid' : 'Owing') + '</span>' : '') + '</div>').join('') + '</div></details>';
+    return '<details class="fold" data-fkey="' + esc(key) + '"' + (fineOpen[key] ? ' open' : '') + '><summary><span>' + esc(fmtDate(d)) + '</span><span class="muted small" style="margin-left:auto">' + mh(fi) + ' fined · ' + mh(pa) + ' paid</span></summary><div class="fold-body">' +
+      es.slice().sort((a,b) => a.name.localeCompare(b.name)).map(e => '<div class="erow"><div class="el"><b>' + esc(e.name) + '</b> · ' + esc(e.label) + '</div><span class="ea ' + (e.amount < 0 ? 'neg' : 'pos') + '">' + (e.amount < 0 ? '−' : '') + money(Math.abs(e.amount)) + '</span>' + (e.amount > 0 ? '<span class="pill' + (e.paid ? ' in' : '') + '">' + (e.paid ? 'Paid' : 'Owing') + '</span>' : '') + '</div>').join('') + '</div></details>';
   }).join('') : '<div class="card empty"><b>No fines yet</b>Fines added by the editors will show here week by week.</div>';
 
   if(edit){
-    const typeRows = (arr, kind) => arr.map(t => '<div class="adminrow"><span class="pname">' + esc(t.name) + ' · ' + money(t.amount) + '</span><button class="linkbtn" data-act="delType" data-kind="' + kind + '" data-id="' + esc(t.id) + '">Remove</button></div>').join('');
+    const typeRows = (arr, kind) => arr.map(t => '<div class="adminrow"><span class="pname">' + esc(t.name) + ' · ' + (kind === 'reward' ? mh(-t.amount) : mh(t.amount)) + '</span><button class="linkbtn" data-act="delType" data-kind="' + kind + '" data-id="' + esc(t.id) + '">Remove</button></div>').join('');
     h += '<div class="section-title">Editor tools</div>' +
-      '<details class="fold" data-fkey="mgr"' + (fineOpen.mgr ? ' open' : '') + '><summary>Fine and reward types</summary><div class="fold-body">' +
+      fpFold(f) + '<details class="fold" data-fkey="mgr"' + (fineOpen.mgr ? ' open' : '') + '><summary>Fine and reward types</summary><div class="fold-body">' +
       (!f.types.length && !f.rewards.length ? '<button class="btn red full" data-act="seedFines" style="margin-bottom:12px">Add the standard BBTNF fines and rewards</button>' : '') +
       '<div class="muted small" style="font-weight:600;margin-bottom:4px">FINES</div>' + (typeRows(f.types, 'fine') || '<div class="muted small">None yet.</div>') +
       '<div class="row" style="margin:10px 0 18px"><input type="text" id="tName" class="grow" placeholder="New fine" maxlength="40"><input type="number" id="tAmt" inputmode="decimal" step="0.5" min="0" placeholder="£" style="width:80px"><button class="btn sm" data-act="addType" data-kind="fine">Add</button></div>' +
@@ -845,7 +865,7 @@ function renderAll(){
 
 /* ================= actions ================= */
 async function addEntry(pid, label, amount){
-  const p = league.players.find(p => p.id === pid); if(!p) return false;
+  const p = league.fines.players.find(p => p.id === pid); if(!p) return false;
   const date = fineDate || todayStr();
   const ok = await mutate(cur => { cur.fines.entries.push({ id:uid(), season:cur.fines.season, date, playerId:pid, name:p.name, label, amount:r2(amount), paid:false }); });
   if(ok) toast(p.name + ': ' + label + ' ' + (amount < 0 ? '−' : '') + money(Math.abs(amount)));
@@ -880,6 +900,39 @@ document.addEventListener('click', async e => {
     case 'login': doLogin('loginPin', 'loginErr'); break;
     case 'finelogin': doLogin('finePin', 'finePinErr'); break;
     case 'logout': user = null; try{ localStorage.removeItem(LS_EDITOR); }catch(e){} renderAvail(); renderFines(true); renderAdmin(true); break;
+    case 'rename': renamePid = b.dataset.pid; renderAdmin(true); { const i = $('#renameIn'); if(i){ i.focus(); i.select(); } } break;
+    case 'renameCancel': renamePid = ''; renderAdmin(true); break;
+    case 'renameSave': {
+      const nm = ($('#renameIn').value || '').trim(); if(!nm){ toast('Enter a name'); break; }
+      const pid = renamePid;
+      if(await mutate(cur => {
+        const p = cur.players.find(x => x.id === pid); if(!p) return;
+        p.name = nm;
+        cur.matches.forEach(m => (m.scorers || []).forEach(sc => { if(sc.playerId === pid) sc.name = nm; }));
+        Object.keys(cur.weeks).forEach(d => { const r = (cur.weeks[d].rows || {})[pid]; if(r) r.n = nm; });
+      })){ renamePid = ''; toast('Name updated'); renderAdmin(true); }
+      break;
+    }
+    case 'fpAdd': {
+      const nm = ($('#fpName').value || '').trim(); if(!nm){ toast('Enter a name'); break; }
+      if(await mutate(cur => { cur.fines.players.push({ id:uid(), name:nm }); })){ toast(nm + ' added'); }
+      break;
+    }
+    case 'fpRename': renameFp = b.dataset.pid; renderFines(true); { const i = $('#fpRenameIn'); if(i){ i.focus(); i.select(); } } break;
+    case 'fpRenameCancel': renameFp = ''; renderFines(true); break;
+    case 'fpRenameSave': {
+      const nm = ($('#fpRenameIn').value || '').trim(); if(!nm){ toast('Enter a name'); break; }
+      const pid = renameFp;
+      if(await mutate(cur => {
+        const p = cur.fines.players.find(x => x.id === pid); if(!p) return;
+        p.name = nm; cur.fines.entries.forEach(e => { if(e.playerId === pid) e.name = nm; });
+      })){ renameFp = ''; toast('Name updated'); renderFines(true); }
+      break;
+    }
+    case 'fpDel': askConfirm('Remove this player and all of their fines?', async () => {
+      await mutate(cur => { cur.fines.players = cur.fines.players.filter(x => x.id !== b.dataset.pid); cur.fines.entries = cur.fines.entries.filter(e => e.playerId !== b.dataset.pid); });
+      if(finePid === b.dataset.pid) finePid = '';
+    }); break;
     case 'startLeague': if(await mutate(() => {})) toast('League started'); break;
     case 'rd+': form.reds++; refreshForm(); break;
     case 'rd-': form.reds = Math.max(0, form.reds - 1); refreshForm(); break;
@@ -981,7 +1034,10 @@ document.addEventListener('toggle', e => {
   if(d.tagName === 'DETAILS' && d.dataset.fkey) fineOpen[d.dataset.fkey] = d.open;
 }, true);
 document.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.id === 'loginPin') doLogin('loginPin', 'loginErr');
-  if(e.key === 'Enter' && e.target.id === 'finePin') doLogin('finePin', 'finePinErr'); });
+  if(e.key === 'Enter' && e.target.id === 'finePin') doLogin('finePin', 'finePinErr');
+  if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
+  if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
+  if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); } });
 document.addEventListener('focusout', () => { setTimeout(() => {
   const ae = document.activeElement;
   if(pendingAdminRender && !(ae && $('#adminBody').contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT'))) renderAdmin(true);

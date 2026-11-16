@@ -254,7 +254,13 @@
   .tc-cap{margin:8px 0 10px;padding:8px;border-radius:10px;background:rgba(128,128,128,.2)}
   .tc-cap span{display:block;font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.7}
   .tc-cap b{font-size:16px}
-  .tc-p{padding:6px 0;font-size:14.5px;border-top:1px solid rgba(128,128,128,.3)}
+  .tc-g{font-family:var(--mono);font-size:13px;opacity:.9;white-space:nowrap}
+  .tc-p{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;font-size:14.5px;border-top:1px solid rgba(128,128,128,.3)}
+  .hub{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hubbtn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:16px 14px;min-height:112px;color:var(--ink);min-width:0}
+  .hubbtn .hi{font-size:26px;line-height:1;margin-bottom:6px}
+  .hubbtn b{font-size:15.5px}
+  .hubbtn .hs{font-size:12.5px;color:var(--muted)}
   .cbtn{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:500;color:var(--ink)}
   .cbtn.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
   .cbadge{display:inline-block;font-size:10px;font-weight:600;border:1.5px solid currentColor;border-radius:50%;width:19px;height:19px;line-height:16px;text-align:center;margin-left:6px;vertical-align:middle}
@@ -275,7 +281,6 @@
 
   <main>
     <section class="view active" id="view-home"><div id="homeBody"></div></section>
-    <section class="view" id="view-teams"><div id="teamsBody"></div></section>
     <section class="view" id="view-scorers"><div id="scorersBody"></div></section>
     <section class="view" id="view-avail"><div id="availBody"></div></section>
     <section class="view" id="view-fines"><div id="finesBody"></div></section>
@@ -284,7 +289,6 @@
 
   <nav class="tabs">
     <button class="active" data-tab="home"><span class="ic">🏆</span>Home</button>
-    <button data-tab="teams"><span class="ic">👕</span>Teams</button>
     <button data-tab="scorers"><span class="ic">⚽</span>Scorers</button>
     <button data-tab="avail"><span class="ic">📅</span>Availability</button>
     <button data-tab="fines"><span class="ic">🍺</span>Pub Fines</button>
@@ -372,6 +376,7 @@ let db = null;
 let scorerScope = 'series';
 let currentTab = 'home';
 let adminOpen = { add:true };
+let adminSection = '', adminSecs = {};
 let form = newForm();
 let feeDate = '', finDate = '', renamePid = '', renameFp = '';
 let pendingAdminRender = false, pendingFinesRender = false;
@@ -469,11 +474,12 @@ function matchCard(m){
 function capName(l, team){ const p = l.players.find(p => p.id === l.captains[team]); return p ? p.name : ''; }
 function teamsCaptainsHtml(){
   if(!league.players.some(p => p.team === 'reds' || p.team === 'whites')) return '';
+  const g = goalsMap(league.seriesNo);
   const col = team => {
     const ps = league.players.filter(p => p.team === team).sort(byName), cap = capName(league, team);
     return '<div class="card tcol ' + team + '"><div class="tc-head">' + (team === 'reds' ? 'REDS' : 'WHITES') + '</div>' +
       '<div class="tc-cap"><span>Captain</span><b>' + (cap ? esc(cap) : '—') + '</b></div>' +
-      (ps.length ? ps.map(p => '<div class="tc-p">' + esc(p.name) + '</div>').join('') : '<div class="small" style="opacity:.7">No players yet</div>') + '</div>';
+      (ps.length ? ps.map(p => '<div class="tc-p"><span>' + esc(p.name) + (league.captains[team] === p.id ? '<span class="cbadge">C</span>' : '') + '</span>' + (g[p.id] ? '<span class="tc-g">⚽ ' + g[p.id].goals + '</span>' : '') + '</div>').join('') : '<div class="small" style="opacity:.7">No players yet</div>') + '</div>';
   };
   return '<div class="section-title">Teams · Series ' + league.seriesNo + '</div><div class="teamsrow">' + col('reds') + col('whites') + '</div>';
 }
@@ -693,9 +699,7 @@ function histAdminHtml(){
     '<div class="adminrow"><div><div style="font-weight:600">' + esc(x.label) + '</div><div class="muted small">Reds ' + x.reds + ' – ' + x.whites + ' Whites</div></div><button class="linkbtn" data-act="histDel" data-id="' + esc(x.id) + '">Remove</button></div>').join('');
   return h;
 }
-function fold(key, title, body){
-  return '<details class="fold" data-key="' + key + '"' + (adminOpen[key] ? ' open' : '') + '><summary>' + title + '</summary><div class="fold-body">' + body + '</div></details>';
-}
+function fold(key, title, body){ adminSecs[key] = { title:title, body:body }; return ''; }
 function renderAdmin(force){
   const el = $('#adminBody');
   const ae = document.activeElement;
@@ -707,6 +711,7 @@ function renderAdmin(force){
     return;
   }
   pendingAdminRender = false;
+  adminSecs = {};
 
   if(!user){
     el.innerHTML = '<div class="card"><h2>Editor PIN</h2><p class="muted small" style="margin:8px 0 14px">Everyone can view the league. Enter the editor PIN to add results, fines and change teams.</p>' +
@@ -769,6 +774,25 @@ function renderAdmin(force){
     '<button class="btn ghost full" data-act="newSeries">Start a new series</button>' +
     '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>' + histAdminHtml());
 
+  const head = h;
+  const labels = {
+    add:['➕', 'Add result', st.complete ? 'Series finished' : 'Series ' + league.seriesNo + ': ' + st.r + '–' + st.w],
+    manage:['📋', 'Edit results', all.length + (all.length === 1 ? ' result' : ' results')],
+    players:['👥', 'Players & teams', players.length + (players.length === 1 ? ' player' : ' players') + ' · captains'],
+    fees:['💷', 'Match day & fees', Object.keys(weekRows(feeDate)).length + ' playing · ' + fmtDate(feeDate)],
+    fin:['🏦', 'Finances', 'Bank: ' + money(finStats().balance)],
+    next:['📅', 'Next match', fmtDate(nextDate())],
+    series:['🏁', 'Series & past scores', 'Series ' + league.seriesNo + ' · first to ' + league.target]
+  };
+  if(!adminSection || !adminSecs[adminSection]){
+    adminSection = '';
+    h = head + '<div class="hub">' + Object.keys(labels).map(k => '<button class="hubbtn" data-act="adminGo" data-sec="' + k + '"><span class="hi">' + labels[k][0] + '</span><b>' + labels[k][1] + '</b><span class="hs">' + esc(labels[k][2]) + '</span></button>').join('') + '</div>';
+    el.innerHTML = h;
+    return;
+  }
+  const sec = adminSecs[adminSection];
+  h = '<button class="btn ghost sm" data-act="adminBack" style="margin-bottom:12px">‹ Admin menu</button>' +
+    '<div class="card sec" data-key="' + adminSection + '"><h2 style="margin-bottom:14px">' + sec.title + '</h2>' + sec.body + '</div>';
   el.innerHTML = h;
   refreshForm();
 }
@@ -896,7 +920,7 @@ function renderFines(force){
 }
 
 function renderAll(){
-  renderHome(); renderTeams(); renderScorers(); renderAvail(); renderFines(); renderAdmin();
+  renderHome(); renderScorers(); renderAvail(); renderFines(); renderAdmin();
 }
 
 /* ================= actions ================= */
@@ -977,6 +1001,8 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'histDel': askConfirm('Remove this previous series score?', async () => { await mutate(cur => { cur.history = cur.history.filter(x => x.id !== b.dataset.id); }); }); break;
+    case 'adminGo': adminSection = b.dataset.sec; renderAdmin(true); window.scrollTo(0, 0); break;
+    case 'adminBack': adminSection = ''; form = form.id ? newForm() : form; renderAdmin(true); window.scrollTo(0, 0); break;
     case 'startLeague': if(await mutate(() => {})) toast('League started'); break;
     case 'rd+': form.reds++; refreshForm(); break;
     case 'rd-': form.reds = Math.max(0, form.reds - 1); refreshForm(); break;
@@ -997,7 +1023,7 @@ document.addEventListener('click', async e => {
     case 'editMatch': {
       const m = league.matches.find(x => x.id === b.dataset.id); if(!m) break;
       form = { id:m.id, seriesNo:m.seriesNo || 1, date:m.date, reds:m.reds, whites:m.whites, scorers:(m.scorers || []).map(s => Object.assign({}, s)), sg:1 };
-      adminOpen.add = true; renderAdmin(true); window.scrollTo(0, 0); break;
+      adminSection = 'add'; renderAdmin(true); window.scrollTo(0, 0); break;
     }
     case 'delMatch': askConfirm('Delete this result? This changes the series score.', async () => {
       if(await mutate(cur => { cur.matches = cur.matches.filter(x => x.id !== b.dataset.id); })) toast('Result deleted');

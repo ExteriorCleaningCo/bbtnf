@@ -360,7 +360,7 @@ function hideBanner(){ $('#banner').style.display = 'none'; }
 
 /* ================= data ================= */
 function defaultFines(){ return { season:1, players:[], types:[], rewards:[], entries:[] }; }
-function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]} }; }
+function defaultLeague(){ return { name:'BBTNF Reds v Whites', target:10, seriesNo:1, players:[], matches:[], nextMatch:'', seriesName:'', fines:defaultFines(), captains:{reds:'',whites:''}, seriesMeta:{}, history:[], weeks:{}, fee:5, finance:{opening:0,entries:[]} }; }
 function normalize(d){
   const o = Object.assign(defaultLeague(), d || {});
   o.players = o.players || []; o.matches = o.matches || [];
@@ -369,6 +369,7 @@ function normalize(d){
   f.players = f.players || []; f.types = f.types || []; f.rewards = f.rewards || []; f.entries = f.entries || []; f.season = Number(f.season) || 1;
   o.fines = f;
   o.captains = Object.assign({ reds:'', whites:'' }, o.captains || {});
+  o.seriesName = String(o.seriesName || '');
   o.seriesMeta = o.seriesMeta || {}; o.weeks = o.weeks || {}; o.history = o.history || [];
   o.fee = (o.fee === undefined || o.fee === null || isNaN(Number(o.fee))) ? 5 : Number(o.fee);
   const fin = Object.assign({ opening:0, entries:[] }, o.finance || {});
@@ -399,6 +400,11 @@ function newForm(){ return { id:null, seriesNo:null, date:lastMonday(), reds:0, 
 /* ---- series maths ---- */
 function matchesOf(n){ return (league ? league.matches : []).filter(m => (m.seriesNo || 1) === n); }
 function sortedMatches(n){ return matchesOf(n).slice().sort((a,b) => (b.date||'').localeCompare(a.date||'')); }
+function seriesLabel(n){
+  if(!league) return 'Series ' + n;
+  const nm = (n === league.seriesNo) ? league.seriesName : ((league.seriesMeta[n] || {}).name || '');
+  return nm || ('Series ' + n);
+}
 function seriesState(n){
   let r = 0, w = 0;
   matchesOf(n).forEach(m => { if(m.reds > m.whites) r++; else if(m.whites > m.reds) w++; });
@@ -489,7 +495,7 @@ function teamsCaptainsHtml(){
       '<div class="tc-cap"><span>Captain</span><b>' + (cap ? esc(cap) : '—') + '</b></div>' +
       (ps.length ? ps.map(p => '<div class="tc-p"><span>' + esc(p.name) + (league.captains[team] === p.id ? '<span class="cbadge">C</span>' : '') + '</span>' + (g[p.id] ? '<span class="tc-g">⚽ ' + g[p.id].goals + '</span>' : '') + '</div>').join('') : '<div class="small" style="opacity:.7">No players yet</div>') + '</div>';
   };
-  return '<div class="section-title">Teams · Series ' + league.seriesNo + '</div><div class="teamsrow">' + col('reds') + col('whites') + '</div>';
+  return '<div class="section-title">Teams · ' + esc(seriesLabel(league.seriesNo)) + '</div><div class="teamsrow">' + col('reds') + col('whites') + '</div>';
 }
 function renderHome(){
   const el = $('#homeBody');
@@ -501,7 +507,7 @@ function renderHome(){
   } else {
     note = 'First to ' + target + ' wins · Reds need ' + (target - st.r) + ' · Whites need ' + (target - st.w);
   }
-  let h = '<div class="hero ' + (st.complete ? 'done' : '') + '"><div class="hero-label">Series ' + n + ' · First to ' + target + '</div>' +
+  let h = '<div class="hero ' + (st.complete ? 'done' : '') + '"><div class="hero-label">' + esc(seriesLabel(n)) + ' · First to ' + target + '</div>' +
     '<div class="hero-score"><div class="side reds"><div class="side-name">REDS</div><div class="side-num">' + st.r + '</div></div>' +
     '<div class="vs">v</div><div class="side whites"><div class="side-name">WHITES</div><div class="side-num">' + st.w + '</div></div></div>' +
     pips(st.r, target, 'reds') + pips(st.w, target, 'whites') + '<div class="hero-note">' + esc(note) + '</div></div>';
@@ -534,7 +540,7 @@ function renderHome(){
       const label = s.winner ? (s.winner === 'reds' ? 'Reds' : 'Whites') + ' won ' + Math.max(s.r, s.w) + '–' + Math.min(s.r, s.w) : 'Finished ' + s.r + '–' + s.w;
       const meta = league.seriesMeta[i] || {};
       const capLine = (meta.reds || meta.whites) ? '<div class="muted small" style="margin-bottom:10px">Captains · Reds: ' + esc(meta.reds || '—') + ' · Whites: ' + esc(meta.whites || '—') + '</div>' : '';
-      h += '<details class="fold"><summary>Series ' + i + ' · ' + esc(label) + '</summary><div class="fold-body">' + capLine + sortedMatches(i).map(matchCard).join('') + '</div></details>';
+      h += '<details class="fold"><summary>' + esc(seriesLabel(i)) + ' · ' + esc(label) + '</summary><div class="fold-body">' + capLine + sortedMatches(i).map(matchCard).join('') + '</div></details>';
     });
     league.history.forEach(x => {
       const badge = x.reds > x.whites ? '<span class="badge reds">Reds won</span>' : (x.whites > x.reds ? '<span class="badge whites">Whites won</span>' : '<span class="badge draw">Level</span>');
@@ -801,7 +807,7 @@ function renderAdmin(force){
 
   const all = league.matches.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''));
   h += fold('manage', 'Edit or delete results (' + all.length + ')', all.length ? all.map(m =>
-    '<div class="adminrow"><div><div style="font-weight:600">' + esc(fmtDate(m.date)) + '</div><div class="muted small">Series ' + (m.seriesNo || 1) + ' · Reds ' + m.reds + ' – ' + m.whites + ' Whites</div></div>' +
+    '<div class="adminrow"><div><div style="font-weight:600">' + esc(fmtDate(m.date)) + '</div><div class="muted small">' + esc(seriesLabel(m.seriesNo || 1)) + ' · Reds ' + m.reds + ' – ' + m.whites + ' Whites</div></div>' +
     '<div class="row"><button class="btn ghost sm" data-act="editMatch" data-id="' + esc(m.id) + '">Edit</button><button class="btn ghost sm" data-act="delMatch" data-id="' + esc(m.id) + '">Delete</button></div></div>').join('') : '<div class="muted small">No results yet.</div>');
 
   const players = league.players.slice().sort(byName);
@@ -819,21 +825,22 @@ function renderAdmin(force){
     '<div class="hint">Mondays only. If you leave this empty the app uses the next Monday automatically.</div>');
 
   h += fold('series', 'Series settings and previous scores',
+    '<div class="field"><label for="serName">Name of this series</label><div class="row"><input type="text" id="serName" class="grow" placeholder="e.g. Winter 2026" maxlength="40" value="' + esc(league.seriesName) + '"><button class="btn sm" data-act="setSerName">Save</button></div><div class="hint">Shows on Home and Teams instead of "Series ' + league.seriesNo + '". Leave empty to go back to the number.</div></div>' +
     '<div class="field"><label for="targetIn">Wins needed to take the series</label><div class="row"><input type="number" id="targetIn" min="1" max="50" value="' + league.target + '" style="width:100px"><button class="btn sm" data-act="setTarget">Save</button></div></div>' +
-    '<div class="hint" style="margin-bottom:12px">Currently series ' + league.seriesNo + ': Reds ' + st.r + ' – ' + st.w + ' Whites.</div>' +
+    '<div class="hint" style="margin-bottom:12px">Currently ' + esc(seriesLabel(league.seriesNo)) + ': Reds ' + st.r + ' – ' + st.w + ' Whites.</div>' +
     '<button class="btn ghost full" data-act="newSeries">Start a new series</button>' +
     '<div class="hint">Old series and their results stay on the Home tab under "Previous series".</div>' + histAdminHtml());
 
   const head = h;
   const labels = {
-    add:['➕', 'Add result', st.complete ? 'Series finished' : 'Series ' + league.seriesNo + ': ' + st.r + '–' + st.w],
+    add:['➕', 'Add result', st.complete ? 'Series finished' : seriesLabel(league.seriesNo) + ': ' + st.r + '–' + st.w],
     manage:['📋', 'Edit results', all.length + (all.length === 1 ? ' result' : ' results')],
     players:['👥', 'Players & teams', players.length + (players.length === 1 ? ' player' : ' players') + ' · captains'],
     pick:['👕', 'Pick teams', Object.keys(weekRows(feeDate)).length + ' picked · ' + fmtDate(feeDate)],
     fees:['💷', 'Match fees', Object.keys(weekRows(feeDate)).length + ' playing · ' + fmtDate(feeDate)],
     fin:['🏦', 'Finances', 'Bank: ' + money(finStats().balance)],
     next:['📅', 'Next match', fmtDate(nextDate())],
-    series:['🏁', 'Series & past scores', 'Series ' + league.seriesNo + ' · first to ' + league.target]
+    series:['🏁', 'Series & past scores', seriesLabel(league.seriesNo) + ' · first to ' + league.target]
   };
   if(!adminSection || !adminSecs[adminSection]){
     adminSection = '';
@@ -1055,6 +1062,7 @@ document.addEventListener('click', async e => {
     case 'histDel': askConfirm('Remove this previous series score?', async () => { await mutate(cur => { cur.history = cur.history.filter(x => x.id !== b.dataset.id); }); }); break;
     case 'adminGo': adminSection = b.dataset.sec; renderAdmin(true); window.scrollTo(0, 0); break;
     case 'adminBack': adminSection = ''; form = form.id ? newForm() : form; renderAdmin(true); window.scrollTo(0, 0); break;
+    case 'setSerName': { const nm = ($('#serName').value || '').trim(); if(await mutate(cur => { cur.seriesName = nm; })) toast(nm ? 'Series named' : 'Name cleared'); break; }
     case 'startLeague': if(await mutate(() => {})) toast('League started'); break;
     case 'rd+': form.reds++; refreshForm(); break;
     case 'rd-': form.reds = Math.max(0, form.reds - 1); refreshForm(); break;
@@ -1143,7 +1151,8 @@ document.addEventListener('click', async e => {
       if(await mutate(cur => { cur.fines.season = (cur.fines.season || 1) + 1; })) toast('New season started'); }); break;
     case 'newSeries': askConfirm('Start a new series from 0–0? The current one moves to "Previous series".', async () => {
       if(await mutate(cur => {
-        cur.seriesMeta[cur.seriesNo] = { reds:capName(cur, 'reds'), whites:capName(cur, 'whites') };
+        cur.seriesMeta[cur.seriesNo] = { reds:capName(cur, 'reds'), whites:capName(cur, 'whites'), name:cur.seriesName || '' };
+        cur.seriesName = '';
         cur.captains = { reds:'', whites:'' };
         cur.seriesNo = (cur.seriesNo || 1) + 1; })){ form = newForm(); toast('New series started'); }
     }); break;
@@ -1166,7 +1175,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.id 
   if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); }
-  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', openIn:'setOpen', targetIn:'setTarget' };
+  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', serName:'setSerName', hsName:'histAdd', hsReds:'histAdd', hsWhites:'histAdd', openIn:'setOpen', targetIn:'setTarget' };
   if(e.key === 'Enter' && ENTER_MAP[e.target.id]){
     const parts = ENTER_MAP[e.target.id].split(':');
     const bt = document.querySelector('[data-act="' + parts[0] + '"]' + (parts[1] ? '[data-kind="' + parts[1] + '"]' : ''));

@@ -262,7 +262,6 @@
   <div class="row"><button class="btn ghost" data-act="confirmNo">Cancel</button><button class="btn red" data-act="confirmYes">Confirm</button></div></div></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script>
 /* ================= Firebase config (same project as the fines app) ================= */
@@ -277,7 +276,9 @@ const firebaseConfig = {
 
 const LS_CACHE = 'bbtnfLeagueCache';
 const LS_ME = 'bbtnfLeagueMe';
-const EDITOR_EMAIL = 'editors@bbtnf-league.app';   // shared editor account; the PIN is its password
+const LS_EDITOR = 'bbtnfLeagueEditor';
+// Editor PIN is stored only as a hash (salted SHA-256). Currently the same PIN as the old fines app.
+const EDITOR_PIN_HASH = '1225b5e5297f0bce34f2010d99b59a7298f4a6f72f2ec2ad7ca69bd0849c29c2';
 const SQUAD = ['Sam','Jord','Suggsy','Andy','Fonty','Cam','Brad','Browny','Dan','Figo','Jack','Adam','Leigh','Fraser'];
 
 /* ================= helpers ================= */
@@ -321,8 +322,9 @@ function normalize(d){
 let league = null;          // null until the cloud (or cache) gives us something
 let loaded = false;
 let avail = {};             // responses for the next match
-let user = null;            // signed-in editor
-let db = null, auth = null;
+let user = null;            // set when the editor PIN has been entered on this device
+try{ if(localStorage.getItem(LS_EDITOR) === '1') user = { editor:true }; }catch(e){}
+let db = null;
 let scorerScope = 'series';
 let currentTab = 'home';
 let adminOpen = { add:true };
@@ -379,7 +381,7 @@ async function mutate(fn){
     return true;
   }catch(e){
     console.error(e);
-    if(e && e.code === 'permission-denied') toast("You're signed in, but not an approved editor");
+    if(e && e.code === 'permission-denied') toast("Couldn't save — check the Firebase rules");
     else toast("Couldn't save — check your connection");
     return false;
   }
@@ -744,7 +746,7 @@ document.addEventListener('click', async e => {
     case 'setme': { const me = localStorage.getItem(LS_ME); if(me) setAvailability(me, b.dataset.s); break; }
     case 'setpid': setAvailability(b.dataset.pid, b.dataset.s); break;
     case 'login': doLogin(); break;
-    case 'logout': if(auth) auth.signOut(); break;
+    case 'logout': user = null; try{ localStorage.removeItem(LS_EDITOR); }catch(e){} renderAvail(); renderFines(true); renderAdmin(true); break;
     case 'seed': await mutate(cur => { if(!cur.players.length) cur.players = SQUAD.map(n => ({ id:uid(), name:n, team:'' })); }) && toast('League set up'); break;
     case 'rd+': form.reds++; refreshForm(); break;
     case 'rd-': form.reds = Math.max(0, form.reds - 1); refreshForm(); break;
@@ -840,16 +842,19 @@ function showTab(t){
   window.scrollTo(0, 0);
 }
 
-function doLogin(){
-  const pass = ($('#loginPin').value || '').trim();
+async function doLogin(){
+  const pin = ($('#loginPin').value || '').trim();
   const err = $('#loginErr');
-  if(!pass){ err.textContent = 'Enter the PIN'; return; }
-  if(!auth){ err.textContent = 'Not connected — try again in a moment'; return; }
-  err.textContent = 'Signing in…';
-  auth.signInWithEmailAndPassword(EDITOR_EMAIL, pass).catch(e => {
-    const c = e && e.code || '';
-    err.textContent = (c.includes('invalid') || c.includes('wrong') || c.includes('user-not-found')) ? 'Wrong PIN' : (c.includes('network') ? 'No connection' : 'Could not sign in');
-  });
+  if(!pin){ err.textContent = 'Enter the PIN'; return; }
+  let hex = '';
+  try{
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('bbtnf:' + pin));
+    hex = Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+  }catch(e){ err.textContent = 'Could not check the PIN here'; return; }
+  if(hex !== EDITOR_PIN_HASH){ err.textContent = 'Wrong PIN'; return; }
+  user = { editor:true };
+  try{ localStorage.setItem(LS_EDITOR, '1'); }catch(e){}
+  renderAvail(); renderFines(true); renderAdmin(true);
 }
 
 /* ================= Firebase wiring ================= */
@@ -872,10 +877,8 @@ function start(){
   try{
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    auth = firebase.auth();
   }catch(e){ console.error(e); showBanner('Could not connect', true); return; }
 
-  auth.onAuthStateChanged(u => { user = u; renderAvail(); renderFines(true); renderAdmin(true); });
 
   db.collection('league').doc('main').onSnapshot(s => {
     loaded = true;

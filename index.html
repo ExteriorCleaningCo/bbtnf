@@ -229,7 +229,7 @@
   .fhero .neg{color:#FF7B7B}
   .paidbtn{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:600}
   .paidbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
-  nav.tabs button{font-size:10px}
+  nav.tabs button{font-size:9.5px;letter-spacing:-.1px;padding-left:0;padding-right:0;min-width:0}
   header.top .t1{font-weight:500;letter-spacing:4px;font-size:20px}
 
   b,strong{font-weight:600}
@@ -281,17 +281,21 @@
 
   <main>
     <section class="view active" id="view-home"><div id="homeBody"></div></section>
+    <section class="view" id="view-teams"><div id="teamsBody"></div></section>
     <section class="view" id="view-scorers"><div id="scorersBody"></div></section>
     <section class="view" id="view-avail"><div id="availBody"></div></section>
     <section class="view" id="view-fines"><div id="finesBody"></div></section>
+    <section class="view" id="view-voting"><div id="votingBody"></div></section>
     <section class="view" id="view-admin"><div id="adminBody"></div></section>
   </main>
 
   <nav class="tabs">
     <button class="active" data-tab="home"><span class="ic">🏆</span>Home</button>
+    <button data-tab="teams"><span class="ic">👕</span>Teams</button>
     <button data-tab="scorers"><span class="ic">⚽</span>Scorers</button>
     <button data-tab="avail"><span class="ic">📅</span>Availability</button>
     <button data-tab="fines"><span class="ic">🍺</span>Pub Fines</button>
+    <button data-tab="voting"><span class="ic">🗳️</span>Voting</button>
     <button data-tab="admin"><span class="ic">⚙️</span>Admin</button>
   </nav>
 </div>
@@ -502,7 +506,6 @@ function renderHome(){
     '<div class="vs">v</div><div class="side whites"><div class="side-name">WHITES</div><div class="side-num">' + st.w + '</div></div></div>' +
     pips(st.r, target, 'reds') + pips(st.w, target, 'whites') + '<div class="hero-note">' + esc(note) + '</div></div>';
 
-  h += teamsCaptainsHtml();
 
   if(!st.complete){
     const c = availCounts(nextDate());
@@ -543,18 +546,17 @@ function renderHome(){
 
 function renderTeams(){
   const el = $('#teamsBody');
-  if(!league){ el.innerHTML = emptyLeague(); return; }
-  const g = goalsMap(league.seriesNo);
-  const block = (team, title) => {
-    const ps = league.players.filter(p => p.team === team).sort(byName);
-    return '<section class="card team ' + team + '"><div class="team-head"><h2>' + title + '</h2><span class="muted small">' + ps.length + ' player' + (ps.length === 1 ? '' : 's') + '</span></div>' +
-      (ps.length ? ps.map(p => '<div class="prow"><span class="pname">' + esc(p.name) + (league.captains[team] === p.id ? '<span class="cbadge" title="Captain">C</span>' : '') + '</span><span class="pgoals">' + (g[p.id] ? '⚽ ' + g[p.id].goals : '') + '</span></div>').join('') : '<div class="muted small">No players yet</div>') + '</section>';
-  };
-  let h = '<div class="teams-grid">' + block('reds', 'Reds') + block('whites', 'Whites') + '</div>';
+  if(!league){ el.innerHTML = loaded ? emptyLeague() : '<div class="empty">Loading…</div>'; return; }
+  let h = teamsCaptainsHtml();
+  if(!h) h = '<div class="card empty"><b>No teams yet</b>Teams and captains will show here once an admin picks them.</div>';
   const un = league.players.filter(p => p.team !== 'reds' && p.team !== 'whites').sort(byName);
-  if(un.length) h += '<section class="card"><div class="team-head"><h2>Not picked yet</h2></div>' + un.map(p => '<div class="prow"><span class="pname">' + esc(p.name) + '</span></div>').join('') + '</section>';
+  if(un.length) h += '<div class="section-title">Not picked yet</div><div class="card">' + un.map(p => '<div class="prow"><span class="pname">' + esc(p.name) + '</span></div>').join('') + '</div>';
   h += '<div class="muted small" style="text-align:center">⚽ = goals this series</div>';
   el.innerHTML = h;
+}
+function renderVoting(){
+  const el = $('#votingBody');
+  if(el) el.innerHTML = '<div class="card empty"><b>Voting</b>Coming soon.</div>';
 }
 
 function renderScorers(){
@@ -970,7 +972,7 @@ function renderFines(force){
 }
 
 function renderAll(){
-  renderHome(); renderScorers(); renderAvail(); renderFines(); renderAdmin();
+  renderHome(); renderTeams(); renderScorers(); renderVoting(); renderAvail(); renderFines(); renderAdmin();
 }
 
 /* ================= actions ================= */

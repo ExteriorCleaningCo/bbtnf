@@ -1013,7 +1013,7 @@ function renderAll(){
 }
 function applyChrome(){
   const tab = document.querySelector('nav.tabs button[data-tab="admin"]');
-  if(tab){ tab.style.display = user ? '' : 'none'; const n = (user && league) ? peopleStats().missing.length : 0; let bd = tab.querySelector('.bdg'); if(n){ if(!bd){ bd = document.createElement('span'); bd.className = 'bdg'; tab.appendChild(bd); } bd.textContent = n; } else if(bd) bd.remove(); }
+  if(tab){ tab.style.display = user ? '' : 'none'; const bd = tab.querySelector('.bdg'); if(bd) bd.remove(); }
   if(!user && currentTab === 'admin') showTab('home');
   const me = meId(), mp = me && league ? league.players.find(p => p.id === me) : null, ft = $('#homeFoot');
   if(ft) ft.innerHTML = (mp || organiser) ? '<span class="muted small">Signed in as ' + esc(mp ? mp.name : 'Organiser') + '</span> <button class="linkbtn" data-act="logout">Sign out</button>' : '<button class="linkbtn" data-act="openGate">Sign in with your name</button>';
@@ -1360,10 +1360,7 @@ function applyAuthUI(){
   const tab = document.querySelector('nav.tabs button[data-tab="admin"]');
   if(tab){
     tab.style.display = user ? '' : 'none';
-    const n = (user && league) ? peopleStats().missing.length : 0;
-    let bd = tab.querySelector('.bdg');
-    if(n){ if(!bd){ bd = document.createElement('span'); bd.className = 'bdg'; tab.appendChild(bd); } bd.textContent = n; }
-    else if(bd) bd.remove();
+    const bd = tab.querySelector('.bdg'); if(bd) bd.remove();
   }
   if(!user && currentTab === 'admin') showTab('home');
   const me = meId(), mp = me && league ? league.players.find(p => p.id === me) : null;

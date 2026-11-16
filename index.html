@@ -643,20 +643,37 @@ function renderAvail(){
 
 /* ---- match fees and finances ---- */
 function weekRows(date){ return ((league.weeks[date] || {}).rows) || {}; }
+let autoBusy = false;
+async function autoAssign(){
+  if(!user || !league || autoBusy || adminSection !== 'pick') return;
+  const av = availBy[feeDate]; if(!av) return;
+  const w = league.weeks[feeDate] || {}, rows = w.rows || {}, auto = w.auto || {};
+  const ids = league.players.filter(p => av[p.id] && av[p.id].s === 'in' && (p.team === 'reds' || p.team === 'whites') && !rows[p.id] && !auto[p.id]).map(p => p.id);
+  if(!ids.length) return;
+  autoBusy = true;
+  const date = feeDate;
+  const ok = await mutate(cur => {
+    const wk = cur.weeks[date] || (cur.weeks[date] = { rows:{}, auto:{} });
+    wk.rows = wk.rows || {}; wk.auto = wk.auto || {};
+    cur.players.forEach(p => { if(ids.indexOf(p.id) >= 0 && !wk.rows[p.id] && !wk.auto[p.id]){ wk.rows[p.id] = { n:p.name, t:p.team, paid:false, amt:cur.fee }; wk.auto[p.id] = true; } });
+  });
+  autoBusy = false;
+  if(ok) toast(ids.length + (ids.length === 1 ? ' player' : ' players') + ' added from replies');
+}
 function pickHtml(){
   const wk = weekRows(feeDate), av = availBy[feeDate] || {};
   const rows = Object.keys(wk).map(k => wk[k]);
   const nR = rows.filter(r => r.t === 'reds').length, nW = rows.filter(r => r.t === 'whites').length;
   let h = '<div class="field"><label for="feeDate">Match night</label><input type="date" id="feeDate" value="' + esc(feeDate) + '"></div>' +
     '<div class="sumrow"><div class="sum"><b>' + nR + '</b><span>Reds</span></div><div class="sum"><b>' + nW + '</b><span>Whites</span></div><div class="sum"><b>' + Object.keys(av).filter(k => av[k].s === 'in').length + '</b><span>Said in</span></div></div>' +
-    '<div class="hint" style="margin:0 0 10px">Pick Reds or Whites for everyone playing that night. They are added to the game week and show in Match fees. Replies from the Availability tab show next to each name.</div>' +
-    '<button class="btn ghost sm full" data-act="pickall">Add everyone who said In (usual team)</button>';
+    '<div class="hint" style="margin:0 0 10px">Anyone who says In on the Availability tab is added automatically to their usual team. Tap Reds, Whites or Off to change it for this night. Everyone picked shows in Match fees.</div>';
   const order = { in:0, maybe:1, '':2, out:3 };
   const ps = league.players.slice().sort((a, b) => (order[(av[a.id] || {}).s || ''] - order[(av[b.id] || {}).s || '']) || a.name.localeCompare(b.name));
   if(!ps.length) return h + '<div class="muted small" style="margin-top:12px">Add players first.</div>';
   h += '<div style="margin-top:8px">' + ps.map(p => {
     const r = wk[p.id], st = (av[p.id] || {}).s || '';
-    const pill = '<span class="pill ' + st + '">' + (st === 'in' ? 'In' : st === 'maybe' ? 'Maybe' : st === 'out' ? 'Out' : 'No reply') + '</span>';
+    const pill = '<span class="pill ' + st + '">' + (st === 'in' ? 'In' : st === 'maybe' ? 'Maybe' : st === 'out' ? 'Out' : 'No reply') + '</span>' +
+      ((st === 'in' && !r && p.team !== 'reds' && p.team !== 'whites') ? ' <span class="muted small">no usual team: pick one</span>' : '');
     const cur = r ? r.t : 'off';
     return '<div class="adminrow"><div><div class="pname">' + esc(p.name) + '</div>' + pill + '</div><div class="tbtns">' +
       [['reds','Reds'],['whites','Whites'],['off','Off']].map(t => '<button class="' + (t[0] === 'off' ? 'none' : t[0]) + (cur === t[0] ? ' sel' : '') + '" data-act="pickteam" data-pid="' + esc(p.id) + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div></div>';
@@ -827,6 +844,7 @@ function renderAdmin(force){
     '<div class="card sec" data-key="' + adminSection + '"><h2 style="margin-bottom:14px">' + sec.title + '</h2>' + sec.body + '</div>';
   el.innerHTML = h;
   refreshForm();
+  if(adminSection === 'pick') setTimeout(autoAssign, 0);
 }
 function refreshForm(){
   if(!$('#fRed')) return;
@@ -1069,17 +1087,8 @@ document.addEventListener('click', async e => {
       if(t === 'off') delete w.rows[p.id];
       else if(w.rows[p.id]) w.rows[p.id].t = t;
       else w.rows[p.id] = { n:p.name, t:t, paid:false, amt:cur.fee };
-      if(!Object.keys(w.rows).length) delete cur.weeks[feeDate];
+      if(!Object.keys(w.rows).length && !Object.keys(w.auto || {}).length) delete cur.weeks[feeDate];
     }); break;
-    case 'pickall': {
-      const av = availBy[feeDate] || {};
-      if(await mutate(cur => {
-        const w = cur.weeks[feeDate] || (cur.weeks[feeDate] = { rows:{} });
-        cur.players.forEach(p => { if(av[p.id] && av[p.id].s === 'in' && (p.team === 'reds' || p.team === 'whites') && !w.rows[p.id]) w.rows[p.id] = { n:p.name, t:p.team, paid:false, amt:cur.fee }; });
-        if(!Object.keys(w.rows).length) delete cur.weeks[feeDate];
-      })) toast('Added everyone who said In');
-      break;
-    }
     case 'wkpay': await mutate(cur => { const w = cur.weeks[feeDate]; if(w && w.rows[b.dataset.pid]) w.rows[b.dataset.pid].paid = !w.rows[b.dataset.pid].paid; }); break;
     case 'wkpayall': await mutate(cur => { const w = cur.weeks[feeDate]; if(w) Object.keys(w.rows).forEach(k => { w.rows[k].paid = true; }); }) && toast('All marked paid'); break;
     case 'finAdd': {

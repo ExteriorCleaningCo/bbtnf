@@ -1037,7 +1037,13 @@ document.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.id 
   if(e.key === 'Enter' && e.target.id === 'finePin') doLogin('finePin', 'finePinErr');
   if(e.key === 'Enter' && e.target.id === 'renameIn'){ const bt = document.querySelector('[data-act="renameSave"]'); if(bt) bt.click(); }
   if(e.key === 'Enter' && e.target.id === 'fpRenameIn'){ const bt = document.querySelector('[data-act="fpRenameSave"]'); if(bt) bt.click(); }
-  if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); } });
+  if(e.key === 'Enter' && e.target.id === 'fpName'){ const bt = document.querySelector('[data-act="fpAdd"]'); if(bt) bt.click(); }
+  const ENTER_MAP = { newName:'addPlayer', tName:'addType:fine', tAmt:'addType:fine', rName:'addType:reward', rAmt:'addType:reward', fCustName:'addCustom:fine', fCustAmt:'addCustom:fine', feeIn:'setFee', openIn:'setOpen', targetIn:'setTarget' };
+  if(e.key === 'Enter' && ENTER_MAP[e.target.id]){
+    const parts = ENTER_MAP[e.target.id].split(':');
+    const bt = document.querySelector('[data-act="' + parts[0] + '"]' + (parts[1] ? '[data-kind="' + parts[1] + '"]' : ''));
+    if(bt){ e.preventDefault(); bt.click(); }
+  } });
 document.addEventListener('focusout', () => { setTimeout(() => {
   const ae = document.activeElement;
   if(pendingAdminRender && !(ae && $('#adminBody').contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT'))) renderAdmin(true);
